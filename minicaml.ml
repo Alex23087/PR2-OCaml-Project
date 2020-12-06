@@ -13,8 +13,8 @@ type 'a environment = identifier -> 'a
 
 type expression =
     | IntImm of int
-    | TrueImm
-    | FalseImm
+    | StringImm of string
+    | BoolImm of bool
     | Times of expression * expression
     | Plus of expression * expression
     | Eq of expression * expression
@@ -32,6 +32,7 @@ type expression =
 type evaluationType =
     | Int of int
     | Bool of bool
+    | Str of string
     | Closure of identifier list * expression * evaluationType environment
     (*| Unbound*)
 
@@ -39,6 +40,8 @@ type evaluationType =
 type typeDescriptor =
     | Integer
     | Boolean
+    | String
+    | Set of typeDescriptor
 
 
 
@@ -64,6 +67,9 @@ let checkType (evType: evaluationType) (typeDesc: typeDescriptor) = match typeDe
     | Boolean -> (match evType with
         | Bool(_) -> true
         | _ -> false)
+    | String -> (match evType with
+        | Str(_) -> true
+        | _ -> false)
     (*| _ -> raise InvalidTypeDescriptor*)
 
 (*Print functions*)
@@ -72,6 +78,7 @@ let print_boolean (x: bool) = if x then (print_string "true") else print_string 
 let printEvaluationType (evType: evaluationType) = match evType with
     | Int(x) -> print_int x
     | Bool(x) -> print_boolean x
+    | Str(x) -> print_string x
     | Closure(_,_,_) -> print_string "closure"
     (*| Unbound -> print_string "Unbound"*)
 
@@ -109,8 +116,8 @@ let boolNot x = match (checkType x Boolean, x) with
 (*Evaluation*)
 let rec eval (e: expression) (env: evaluationType environment) = match e with
     | IntImm(n) -> Int(n)
-    | TrueImm -> Bool(true)
-    | FalseImm -> Bool(false)
+    | BoolImm(b) -> Bool(b)
+    | StringImm(s) -> Str(s)
     | Den(id) -> env id
     | Let(id, exp1, exp2) ->
         eval exp2 (bind id (eval exp1 env) env)
@@ -144,10 +151,10 @@ let v = print_string "\n"
 let x = IsZero(IntImm(0))
 let v = printEvaluationType (eval x emptyEvaluationEnvironment)
 let v = print_string "\n"
-let x = Or(FalseImm, FalseImm)
+let x = Or(BoolImm(false), BoolImm(false))
 let v = printEvaluationType (eval x emptyEvaluationEnvironment)
 let v = print_string "\n"
-let x = If(Or(FalseImm, FalseImm), IntImm(10), IntImm(20))
+let x = If(Or(BoolImm(false), BoolImm(false)), IntImm(10), IntImm(20))
 let v = printEvaluationType (eval x emptyEvaluationEnvironment)
 let v = print_string "\n"
 let x = Let("f", Func(["a"; "b"], Times(Den("a"), Den("b"))), Apply(Den("f"), [IntImm(10); IntImm(4)]))
