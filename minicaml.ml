@@ -29,19 +29,20 @@ type expression =
     | Apply of expression * expression list
 
 
-type evaluationType =
-    | Int of int
-    | Bool of bool
-    | Str of string
-    | Closure of identifier list * expression * evaluationType environment
-    (*| Unbound*)
-
-
 type typeDescriptor =
     | Integer
     | Boolean
     | String
     | Set of typeDescriptor
+
+type evaluationType =
+    | Int of int
+    | Bool of bool
+    | Str of string
+    | SetT of typeDescriptor * evaluationType list
+    | Closure of identifier list * expression * evaluationType environment
+    (*| Unbound*)
+
 
 
 
@@ -60,7 +61,7 @@ let rec bindList (ids: identifier list) (vs: 'a list) (env: 'a environment) =
         | (i::il, v::vl) -> bindList il vl (bind i v env)
         | _ -> raise IncorrectParameterListLength
 
-let checkType (evType: evaluationType) (typeDesc: typeDescriptor) = match typeDesc with
+let rec checkType (evType: evaluationType) (typeDesc: typeDescriptor) = match typeDesc with
     | Integer -> (match evType with
         | Int(_) -> true
         | _ -> false)
@@ -70,16 +71,38 @@ let checkType (evType: evaluationType) (typeDesc: typeDescriptor) = match typeDe
     | String -> (match evType with
         | Str(_) -> true
         | _ -> false)
+    | Set(tDesc) -> (match evType with
+        | SetT(tDesc, elList) -> (let rec checkSet (elements: evaluationType list) =
+            match elements with
+                | [] -> true
+                | el::els -> (checkType el tDesc) && (checkSet els)
+            in checkSet elList)
+        | _ -> false)
     (*| _ -> raise InvalidTypeDescriptor*)
+
+let rec getTypeDescriptor (evType: evaluationType) = match evType with
+    | Int(_) -> Integer
+    | Bool(_) -> Boolean
+    | Str(_) -> String
+    | SetT(x, _) -> Set(x)
+    | Closure(_,_,_) -> raise RuntimeException
+
 
 (*Print functions*)
 let print_boolean (x: bool) = if x then (print_string "true") else print_string "false"
+
+let rec printTypeDescriptor (tDesc: typeDescriptor) = match tDesc with
+    | Integer -> print_string "Integer"
+    | Boolean -> print_string "Boolean"
+    | String -> print_string "String"
+    | Set(x) -> print_string "Set(" ; printTypeDescriptor x ; print_string ")"
 
 let printEvaluationType (evType: evaluationType) = match evType with
     | Int(x) -> print_int x
     | Bool(x) -> print_boolean x
     | Str(x) -> print_string x
-    | Closure(_,_,_) -> print_string "closure"
+    | SetT(x, _) -> print_string "SetT(" ; printTypeDescriptor x ; print_string ")"
+    | Closure(_,_,_) -> print_string "Closure"
     (*| Unbound -> print_string "Unbound"*)
 
 
@@ -160,3 +183,9 @@ let v = print_string "\n"
 let x = Let("f", Func(["a"; "b"], Times(Den("a"), Den("b"))), Apply(Den("f"), [IntImm(10); IntImm(4)]))
 let v = printEvaluationType (eval x emptyEvaluationEnvironment)
 let v = print_string "\n"
+
+let x = SetT(Set(Integer), [SetT(Integer, [Int 1])])
+let v = printEvaluationType x
+let v = print_string "\n"
+
+let td = printTypeDescriptor (getTypeDescriptor ( Int 10 ))
