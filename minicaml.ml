@@ -31,7 +31,7 @@ type expression =
     | And of expression * expression
     | Not of expression
     | Den of identifier
-    | If of expression * expression * expression
+    | IfThenElse of expression * expression * expression
     | Let of identifier * expression * expression
     | Func of identifier list * expression
     | Apply of expression * expression list
@@ -45,6 +45,10 @@ type expression =
     | SetIsSubset of expression * expression
     | SetMin of expression
     | SetMax of expression
+    | Print of expression
+    | GreaterThan of expression * expression
+    | LessThan of expression * expression
+    | IfThen of expression * expression
 
 type evaluationType =
     | Int of int
@@ -198,7 +202,7 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
     | Or(exp1, exp2) -> boolOr (eval exp1 env) (eval exp2 env)
     | And(exp1, exp2) -> boolAnd (eval exp1 env) (eval exp2 env)
     | Not(exp) -> boolNot (eval exp env)
-    | If(guard, b1, b2) -> (let g = eval guard env in
+    | IfThenElse(guard, b1, b2) -> (let g = eval guard env in
             (match (checkType g Boolean, g) with
                 | (true, Bool(gev)) when gev -> eval b1 env
                 | (true, Bool(gev)) when not gev -> eval b2 env
@@ -223,6 +227,7 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
         else
             raise TypeException)
     | SetPut(exp1, exp2) -> setPut (eval exp1 env) (eval exp2 env)
+    | Print(exp) -> (let value = (eval exp env) in printEvaluationType value ; print_string "\n" ; value)
 (*
 | SetPut of expression * expression
 | SetRemove of expression * expression
@@ -245,7 +250,7 @@ let v = print_string "\n"
 let x = Or(BoolImm(false), BoolImm(false))
 let v = printEvaluationType (eval x emptyEvaluationEnvironment)
 let v = print_string "\n"
-let x = If(Or(BoolImm(false), BoolImm(false)), IntImm(10), IntImm(20))
+let x = IfThenElse(Or(BoolImm(false), BoolImm(false)), IntImm(10), IntImm(20))
 let v = printEvaluationType (eval x emptyEvaluationEnvironment)
 let v = print_string "\n"
 let x = Let("f", Func(["a"; "b"], Times(Den("a"), Den("b"))), Apply(Den("f"), [IntImm(10); IntImm(4)]))
@@ -279,6 +284,21 @@ printTypeDescriptor (getTypeDescriptor x);
 print_string "\n"
 
 let x = eval (SetPut(SetOf(Integer, [IntImm 10; IntImm 20; Times(IntImm 5, IntImm 6)]), IntImm(10))) emptyEvaluationEnvironment;;
+printEvaluationType x;
+print_string "\n";
+printTypeDescriptor (getTypeDescriptor x);
+print_string "\n"
+
+let recursive = (
+    Let("r", Func(["n"],
+        IfThenElse(IsZero(Den("n")),
+            Den("n"),
+            Apply(Den("rec"), [Plus(Print(Den("n")), IntImm(-1))])
+        )
+    ),
+    Apply(Den("r"), [IntImm 10])))
+
+let x = eval recursive emptyEvaluationEnvironment;;
 printEvaluationType x;
 print_string "\n";
 printTypeDescriptor (getTypeDescriptor x);
