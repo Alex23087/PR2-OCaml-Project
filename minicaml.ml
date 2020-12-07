@@ -7,6 +7,7 @@ exception IncorrectParameterListLength
 exception TypeException
 exception InterpreterException
 exception EmptySetException
+exception WrongReturnTypeError
 
 
 (*Types*)
@@ -49,6 +50,10 @@ type expression =
     | Print of expression
     | GreaterThan of expression * expression
     | LessThan of expression * expression
+    | Forall of expression * expression
+    | Exists of expression * expression
+    | Filter of expression * expression
+    | Map of expression * expression
 
 type evaluationType =
     | Int of int
@@ -284,9 +289,64 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
         | _ -> raise TypeException)
     | GreaterThan(exp1, exp2) -> Bool(evtGreaterThan (eval exp1 env) (eval exp2 env))
     | LessThan(exp1, exp2) -> Bool(evtGreaterThan (eval exp2 env) (eval exp1 env))
+    | Forall(exp1, exp2) -> (match (eval exp1 env) with
+        | SetT(td, elements)-> Bool(forall elements (eval exp2 env))
+        | _ -> raise TypeException)
+    | Exists(exp1, exp2) -> (match (eval exp1 env) with
+        | SetT(td, elements) -> Bool(exists elements (eval exp2 env))
+        | _ -> raise TypeException)
+    | Filter(exp1, exp2) -> (match (eval exp1 env) with
+        | SetT(td, elements) -> SetT(td, filter elements (eval exp2 env))
+        | _ -> raise TypeException)
+    | Map(exp1, exp2) -> (match (eval exp1 env) with
+        | SetT(td, elements) -> SetT(td, map elements (eval exp2 env))
+        | _ -> raise TypeException)
+(*
+    | Filter of expression * expression
+    | Map of expression * expression
+*)
     (*| _ -> failwith ("not implemented yet")*)
 
+and forall (elements: evaluationType list) (func: evaluationType) = match elements with
+    | [] -> true
+    | x::xs -> ((
+        match func with
+            | Closure(params, body, fenv) -> (match (eval body (bind (List.hd params) x fenv)) with
+                | Bool(b) -> b
+                | _ -> raise WrongReturnTypeError)
+            | _ -> raise TypeException) && (forall xs func))
 
+and exists (elements: evaluationType list) (func: evaluationType) = match elements with
+    | [] -> false
+    | x::xs -> ((
+        match func with
+            | Closure(params, body, fenv) -> (match (eval body (bind (List.hd params) x fenv)) with
+                | Bool(b) -> b
+                | _ -> raise WrongReturnTypeError)
+            |_ -> raise TypeException) || (exists xs func))
+
+and filter (elements: evaluationType list) (func: evaluationType) = match elements with
+    | [] -> []
+    | x::xs -> if ((
+        match func with
+            | Closure(params, body, fenv) -> (match (eval body (bind (List.hd params) x fenv)) with
+                | Bool (b) -> b
+                | _ -> raise WrongReturnTypeError)
+            | _ -> raise TypeException
+        ))
+        then x::(filter xs func)
+        else (filter xs func)
+
+and map (elements: evaluationType list) (func: evaluationType) = match elements with
+    | [] -> []
+    | x::xs -> (match func with
+        | Closure(params, body, fenv) -> (
+            let els = map xs func in
+            let newelem = (eval body (bind (List.hd params) x fenv)) in
+            if (contains els newelem)
+                then els
+                else newelem::els)
+        | _ -> raise TypeException)
 (*Tests*)
 (*
 let x = Let("x", IntImm(10), Times(Den("x"), IntImm 7))
