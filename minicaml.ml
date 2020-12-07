@@ -6,6 +6,7 @@ exception ApplyingNonFunctional
 exception IncorrectParameterListLength
 exception TypeException
 exception InterpreterException
+exception EmptySetException
 
 
 (*Types*)
@@ -48,7 +49,6 @@ type expression =
     | Print of expression
     | GreaterThan of expression * expression
     | LessThan of expression * expression
-    | IfThen of expression * expression
 
 type evaluationType =
     | Int of int
@@ -141,10 +141,38 @@ let rec evtEquals (elem1: evaluationType) (elem2: evaluationType) = match (elem1
     | Bool(a), Bool(b) -> a=b
     | Str(a), Str(b) -> a=b
     | SetT(_,_), SetT(_,_) -> raise InterpreterException (*TODO Add set equality function*)
+    | _ -> raise TypeException
 
 and contains (lst: evaluationType list) (elem: evaluationType) = match lst with
     | [] -> false
     | x::xs -> if (evtEquals x elem) then true else (contains xs elem)
+
+let rec evtGreaterThan (elem1: evaluationType) (elem2: evaluationType) = match (elem1, elem2) with
+    | Int(a), Int(b) -> a>b
+    | Bool(a), Bool(b) -> a && (not b)
+    | Str(a), Str(b) -> a>b
+    | SetT(_,_), SetT(_,_) -> raise InterpreterException (*TODO Add set comparison function*)
+    | _ -> raise TypeException
+
+let rec listWithout (ls: evaluationType list) (el:evaluationType) = match ls with
+    | [] -> []
+    | x::xs -> (if (evtEquals x el)
+        then x::(listWithout xs el)
+        else (listWithout xs el))
+
+let rec setIsSubset (lls: evaluationType list) (rls: evaluationType list) = match lls with
+    | [] -> true
+    | x::xs -> (contains rls x) && (setIsSubset xs rls)
+
+let rec setMax (elems: evaluationType list) = match elems with
+    | [] -> raise EmptySetException
+    | x::[] -> x
+    | x::xs -> (let y = setMax xs in if (evtGreaterThan x y) then x else y)
+
+let rec setMin (elems: evaluationType list) = match elems with
+    | [] -> raise EmptySetException
+    | x::[] -> x
+    | x::xs -> (let y = setMin xs in if (evtGreaterThan y x) then x else y)
 
 (*Builtins*)
 (*let binaryOperator (a: identifier) (b: identifier) (aT: typeDescriptor) (bT: typeDescriptor) (f: )*)
@@ -155,12 +183,6 @@ let intTimes x y = match (checkType x Integer, checkType y Integer, x, y) with
 let intPlus x y = match (checkType x Integer, checkType y Integer, x, y) with
     | (true, true, Int(l), Int(r)) -> Int(l+r)
     | _ -> raise RuntimeException
-
-let intEq x y = match (checkType x Integer, checkType y Integer, x, y) with
-    | (true, true, Int(l), Int(r)) -> Bool(l=r)
-    | _ -> raise RuntimeException
-
-let isZero = intEq (Int 0)
 
 
 let boolOr x y = match (checkType x Boolean, checkType y Boolean, x, y) with
@@ -177,12 +199,20 @@ let boolNot x = match (checkType x Boolean, x) with
 
 
 let setPut set element = match set with
-    | SetT(td, elems) ->(
+    | SetT(td, elems) -> (
         if (checkType element td) then
             if (contains elems element) then
                 set
             else
                 SetT(td, element::elems)
+        else
+            raise TypeException)
+    | _ -> raise TypeException
+
+let setRemove set element = match set with
+    | SetT(td, elems) -> (
+        if (checkType element td) then
+            SetT(td, listWithout elems element)
         else
             raise TypeException)
     | _ -> raise TypeException
@@ -197,8 +227,8 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
         eval exp2 (bind id (eval exp1 env) env)
     | Times(exp1, exp2) -> intTimes (eval exp1 env) (eval exp2 env)
     | Plus(exp1, exp2) -> intPlus (eval exp1 env) (eval exp2 env)
-    | Eq(exp1, exp2) -> intEq (eval exp1 env) (eval exp2 env)
-    | IsZero(exp) -> isZero (eval exp env)
+    | Eq(exp1, exp2) -> Bool(evtEquals (eval exp1 env) (eval exp2 env))
+    | IsZero(exp) -> Bool(evtEquals (eval exp env) (Int 0))
     | Or(exp1, exp2) -> boolOr (eval exp1 env) (eval exp2 env)
     | And(exp1, exp2) -> boolAnd (eval exp1 env) (eval exp2 env)
     | Not(exp) -> boolNot (eval exp env)
@@ -228,19 +258,37 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
             raise TypeException)
     | SetPut(exp1, exp2) -> setPut (eval exp1 env) (eval exp2 env)
     | Print(exp) -> (let value = (eval exp env) in printEvaluationType value ; print_string "\n" ; value)
-(*
-| SetPut of expression * expression
-| SetRemove of expression * expression
-| SetIsEmpty of expression
-| SetContains of expression * expression
-| SetIsSubset of expression * expression
-| SetMin of expression
-| SetMax of expression
-*)
+    | SetRemove(exp1, exp2) -> setRemove (eval exp1 env) (eval exp2 env)
+    | SetIsEmpty(exp) -> (match (eval exp env) with
+        | SetT(_, []) -> Bool(true)
+        | SetT(_,_) -> Bool(false)
+        | _ -> raise TypeException)
+    | SetContains(exp1, exp2) -> (match (eval exp1 env) with
+        | SetT(tDesc, elems) -> (let value = (eval exp2 env) in
+            if (checkType value tDesc)
+                then Bool(contains elems value)
+                else raise TypeException)
+        | _ -> raise TypeException)
+    | SetIsSubset(exp1, exp2) -> (match (eval exp1 env, eval exp2 env) with
+        | (SetT(td1, els1), SetT(td2, els2)) -> (
+            if (td1 = td2)
+                then Bool(setIsSubset els1 els2)
+                else raise TypeException
+            )
+        | _ -> raise TypeException)
+    | SetMin(exp) -> (match (eval exp env) with
+        | SetT(_, elems) -> setMin elems
+        | _ -> raise TypeException)
+    | SetMax(exp) -> (match (eval exp env) with
+        | SetT(_, elems) -> setMax elems
+        | _ -> raise TypeException)
+    | GreaterThan(exp1, exp2) -> Bool(evtGreaterThan (eval exp1 env) (eval exp2 env))
+    | LessThan(exp1, exp2) -> Bool(evtGreaterThan (eval exp2 env) (eval exp1 env))
     (*| _ -> failwith ("not implemented yet")*)
 
 
 (*Tests*)
+(*
 let x = Let("x", IntImm(10), Times(Den("x"), IntImm 7))
 let v = printEvaluationType (eval x emptyEvaluationEnvironment)
 let v = print_string "\n"
@@ -268,26 +316,26 @@ let x = eval (EmptySet(Integer)) emptyEvaluationEnvironment;;
 printEvaluationType x;
 print_string "\n";
 printTypeDescriptor (getTypeDescriptor x);
-print_string "\n"
+print_string "\n";;
 
 
 let x = eval (SingletonSet(Integer, IntImm 7 )) emptyEvaluationEnvironment;;
 printEvaluationType x;
 print_string "\n";
 printTypeDescriptor (getTypeDescriptor x);
-print_string "\n"
+print_string "\n";;
 
 let x = eval (SetOf(Integer, [IntImm 10; IntImm 20; Times(IntImm 5, IntImm 6)])) emptyEvaluationEnvironment;;
 printEvaluationType x;
 print_string "\n";
 printTypeDescriptor (getTypeDescriptor x);
-print_string "\n"
+print_string "\n";;
 
 let x = eval (SetPut(SetOf(Integer, [IntImm 10; IntImm 20; Times(IntImm 5, IntImm 6)]), IntImm(10))) emptyEvaluationEnvironment;;
 printEvaluationType x;
 print_string "\n";
 printTypeDescriptor (getTypeDescriptor x);
-print_string "\n"
+print_string "\n";;
 
 let recursive = (
     Let("r", Func(["n"],
@@ -302,4 +350,5 @@ let x = eval recursive emptyEvaluationEnvironment;;
 printEvaluationType x;
 print_string "\n";
 printTypeDescriptor (getTypeDescriptor x);
-print_string "\n"
+print_string "\n";;
+*)
