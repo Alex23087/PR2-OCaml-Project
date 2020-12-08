@@ -33,7 +33,7 @@ type expression =
     | And of expression * expression
     | Not of expression
     | Den of identifier
-    | IfThenElse of expression * expression * expression
+    | If of expression * expression * expression
     | Let of identifier * expression * expression
     | Func of identifier list * expression
     | Apply of expression * expression list
@@ -145,25 +145,44 @@ let rec evtEquals (elem1: evaluationType) (elem2: evaluationType) = match (elem1
     | Int(a), Int(b) -> a=b
     | Bool(a), Bool(b) -> a=b
     | Str(a), Str(b) -> a=b
-    | SetT(_,_), SetT(_,_) -> raise InterpreterException (*TODO Add set equality function*)
+    | SetT(td1, els1), SetT(td2, els2) -> (td1 = td2) && (evtEqualsSet els1 els2)
     | _ -> raise TypeException
 
 and contains (lst: evaluationType list) (elem: evaluationType) = match lst with
     | [] -> false
     | x::xs -> if (evtEquals x elem) then true else (contains xs elem)
 
-let rec evtGreaterThan (elem1: evaluationType) (elem2: evaluationType) = match (elem1, elem2) with
-    | Int(a), Int(b) -> a>b
-    | Bool(a), Bool(b) -> a && (not b)
-    | Str(a), Str(b) -> a>b
-    | SetT(_,_), SetT(_,_) -> raise InterpreterException (*TODO Add set comparison function*)
-    | _ -> raise TypeException
+and evtEqualsSet (ls1: evaluationType list) (ls2: evaluationType list) = match (ls1, ls2) with
+    | ([], []) -> true
+    | ([], x::xs) -> false
+    | (x::xs, []) -> false
+    | (x::xs, ys) -> (if (contains ys x) then (evtEqualsSet xs (listWithout ys x)) else false)
 
-let rec listWithout (ls: evaluationType list) (el:evaluationType) = match ls with
+and listWithout (ls: evaluationType list) (el:evaluationType) = match ls with
     | [] -> []
     | x::xs -> (if (evtEquals x el)
         then x::(listWithout xs el)
         else (listWithout xs el))
+
+let rec typeDepth (typeDesc: typeDescriptor) = match typeDesc with
+    | Set(td) -> 1 + (typeDepth td)
+    | _ -> 0
+
+let rec listCount (ls: 'a list) = match ls with
+    | [] -> 0
+    | x::xs -> 1 + (listCount xs)
+
+let rec evtGreaterThan (elem1: evaluationType) (elem2: evaluationType) = match (elem1, elem2) with
+    | Int(a), Int(b) -> a>b
+    | Bool(a), Bool(b) -> a && (not b)
+    | Str(a), Str(b) -> a>b
+    | SetT(td1, els1), SetT(td2, els2) -> (let tdp1 = (typeDepth td1) in let tdp2 = (typeDepth td2) in
+        if tdp1>tdp2
+            then true
+            else if tdp2>tdp1
+                then false
+                else (listCount els1) > (listCount els2))
+    | _ -> raise TypeException
 
 let rec setIsSubset (lls: evaluationType list) (rls: evaluationType list) = match lls with
     | [] -> true
@@ -237,7 +256,7 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
     | Or(exp1, exp2) -> boolOr (eval exp1 env) (eval exp2 env)
     | And(exp1, exp2) -> boolAnd (eval exp1 env) (eval exp2 env)
     | Not(exp) -> boolNot (eval exp env)
-    | IfThenElse(guard, b1, b2) -> (let g = eval guard env in
+    | If(guard, b1, b2) -> (let g = eval guard env in
             (match (checkType g Boolean, g) with
                 | (true, Bool(gev)) when gev -> eval b1 env
                 | (true, Bool(gev)) when not gev -> eval b2 env
@@ -358,7 +377,7 @@ let v = print_string "\n"
 let x = Or(BoolImm(false), BoolImm(false))
 let v = printEvaluationType (eval x emptyEvaluationEnvironment)
 let v = print_string "\n"
-let x = IfThenElse(Or(BoolImm(false), BoolImm(false)), IntImm(10), IntImm(20))
+let x = If(Or(BoolImm(false), BoolImm(false)), IntImm(10), IntImm(20))
 let v = printEvaluationType (eval x emptyEvaluationEnvironment)
 let v = print_string "\n"
 let x = Let("f", Func(["a"; "b"], Times(Den("a"), Den("b"))), Apply(Den("f"), [IntImm(10); IntImm(4)]))
@@ -399,7 +418,7 @@ print_string "\n";;
 
 let recursive = (
     Let("r", Func(["n"],
-        IfThenElse(IsZero(Den("n")),
+        If(IsZero(Den("n")),
             Den("n"),
             Apply(Den("rec"), [Plus(Print(Den("n")), IntImm(-1))])
         )
@@ -412,3 +431,89 @@ print_string "\n";
 printTypeDescriptor (getTypeDescriptor x);
 print_string "\n";;
 *)
+
+
+
+
+exception AssertException
+
+let print_debug (evt: evaluationType) =
+    printEvaluationType evt;
+    print_string "\n";
+    printTypeDescriptor (getTypeDescriptor evt);
+    print_string "\n"
+
+let assertEquals (expr: expression) (evt: evaluationType) (debugPrint: bool) = let res = eval expr emptyEvaluationEnvironment in
+    (if debugPrint then
+        print_debug res
+    else
+        print_string "");
+
+    if evtEquals res evt then
+        print_string "Passed\n"
+    else
+        raise AssertException
+;;
+
+let assertEqualsDebug a b = assertEquals a b true;;
+
+let sum = Plus(IntImm 10, IntImm 20);;
+assertEqualsDebug sum (Int 30)
+
+let fibonacci =
+    Let("fibonacci",
+        Func(["n"],
+            If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
+                IntImm(1),
+                Plus(
+                    Apply(
+                        Den("rec"),
+                        [Plus(Den("n"), IntImm(-1))]
+                    ),
+                    Apply(
+                        Den("rec"),
+                        [Plus(Den("n"), IntImm(-2))]
+                    )
+                )
+            )
+        ),
+        Apply(Den("fibonacci"), [IntImm 10])
+    );;
+
+assertEqualsDebug fibonacci (Int 89)
+
+let fibF =
+    Func(["n"],
+        If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
+            IntImm(1),
+            Plus(
+                Apply(
+                    Den("rec"),
+                    [Plus(Den("n"), IntImm(-1))]
+                ),
+                Apply(
+                    Den("rec"),
+                    [Plus(Den("n"), IntImm(-2))]
+                )
+            )
+        )
+    )
+
+let fibSet =
+    Let("fibonacci", fibF,
+        SetOf(Integer,[
+            Apply(Den("fibonacci"), [IntImm 0]);
+            Apply(Den("fibonacci"), [IntImm 1]);
+            Apply(Den("fibonacci"), [IntImm 2]);
+            Apply(Den("fibonacci"), [IntImm 3]);
+            Apply(Den("fibonacci"), [IntImm 4]);
+            Apply(Den("fibonacci"), [IntImm 5]);
+            Apply(Den("fibonacci"), [IntImm 6]);
+            Apply(Den("fibonacci"), [IntImm 7]);
+            Apply(Den("fibonacci"), [IntImm 8]);
+            Apply(Den("fibonacci"), [IntImm 9]);
+        ])
+    )
+;;
+
+print_debug (eval fibSet emptyEvaluationEnvironment)
