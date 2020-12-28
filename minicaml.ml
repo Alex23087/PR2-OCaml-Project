@@ -1,5 +1,5 @@
 (*Exceptions*)
-exception EmptyEnvironment
+exception IdentifierNotFound
 exception InvalidTypeDescriptor
 exception RuntimeException
 exception ApplyingNonFunctional
@@ -13,6 +13,10 @@ exception WrongReturnTypeError
 (*Types*)
 type identifier = string
 
+type identifierList =
+    | NoIdentifier
+    | IdentifierList of identifier * identifierList
+
 type 'a environment = identifier -> 'a
 
 type typeDescriptor =
@@ -20,6 +24,12 @@ type typeDescriptor =
     | Boolean
     | String
     | Set of typeDescriptor
+    | Closure of typeDescriptorList * typeDescriptor
+    | Unknown
+
+and typeDescriptorList =
+    | NoType
+    | TypeDescriptorList of typeDescriptor * typeDescriptorList
 
 type expression =
     | IntImm of int
@@ -35,11 +45,11 @@ type expression =
     | Den of identifier
     | If of expression * expression * expression
     | Let of identifier * expression * expression
-    | Func of identifier list * expression
-    | Apply of expression * expression list
+    | Func of identifierList * expression
+    | Apply of expression * expressionList
     | EmptySet of typeDescriptor
     | SingletonSet of typeDescriptor * expression
-    | SetOf of typeDescriptor * expression list
+    | SetOf of typeDescriptor * expressionList
     | SetPut of expression * expression
     | SetRemove of expression * expression
     | SetIsEmpty of expression
@@ -55,12 +65,16 @@ type expression =
     | Filter of expression * expression
     | Map of expression * expression
 
+and expressionList =
+    | NoExpression
+    | ExpressionList of expression * expressionList
+
 type evaluationType =
     | Int of int
     | Bool of bool
     | Str of string
     | SetT of typeDescriptor * evaluationType list
-    | Closure of identifier list * expression * evaluationType environment
+    | ClosureT of identifierList * expression * evaluationType environment
     (*| Unbound*)
 
 
@@ -68,17 +82,17 @@ type evaluationType =
 
 (*Environment*)
 
-let emptyEvaluationEnvironment = fun (x: identifier) -> raise EmptyEnvironment
+let emptyEvaluationEnvironment = fun (x: identifier) -> raise IdentifierNotFound
 
 let bind (id: identifier) (v: 'a) (env: 'a environment) =
     fun (x: identifier) -> if x = id
         then v
         else env x
 
-let rec bindList (ids: identifier list) (vs: 'a list) (env: 'a environment) =
+let rec bindList (ids: identifierList) (vs: 'a list) (env: 'a environment) =
     match (ids, vs) with
-        | ([], []) -> env
-        | (i::il, v::vl) -> bindList il vl (bind i v env)
+        | (NoIdentifier, []) -> env
+        | (IdentifierList(i, il), v::vl) -> bindList il vl (bind i v env)
         | _ -> raise IncorrectParameterListLength
 
 let rec checkType (evType: evaluationType) (typeDesc: typeDescriptor) = match typeDesc with
@@ -106,7 +120,7 @@ let rec getTypeDescriptor (evType: evaluationType) = match evType with
     | Bool(_) -> Boolean
     | Str(_) -> String
     | SetT(x, _) -> Set(x)
-    | Closure(_,_,_) -> raise RuntimeException
+    | ClosureT(_,_,_) -> raise RuntimeException
 
 
 (*Print functions*)
@@ -129,11 +143,11 @@ let rec printEvaluationType (evType: evaluationType) = match evType with
                 | x::xs -> printEvaluationType x ; print_string ", " ; p xs
             in p x
         ) ; print_string ")"
-    | Closure(id,body,_) -> print_string "Closure(" ;
+    | ClosureT(id,body,_) -> print_string "ClosureT(" ;
         (let rec pID l = match l with
-            | [] -> print_string ""
-            | x::[] -> print_string x
-            | x::xs -> print_string x ; print_string ", " ; pID xs
+            | NoIdentifier -> print_string ""
+            | IdentifierList(x, NoIdentifier) -> print_string x
+            | IdentifierList(x, xs) -> print_string x ; print_string ", " ; pID xs
         in pID id);
         print_string ") <";
         print_string "expr";
@@ -263,10 +277,10 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
                 | (_, _) -> raise TypeException
             )
         )
-    | Func(identifiers, body) -> Closure(identifiers, body, env)
+    | Func(identifiers, body) -> ClosureT(identifiers, body, env)
     | Apply(func, parameters) -> (let f = (eval func env) in match f with
-            | Closure(identifiers, body, fenv) ->
-                    eval body (bindList identifiers (List.map (fun x -> eval x env) parameters) (bind "rec" f fenv))
+            | ClosureT(identifiers, body, fenv) ->
+                    eval body (bindList identifiers (evalList parameters env) (bind "rec" f fenv))
             | _ -> raise ApplyingNonFunctional
         )
     | EmptySet(typeDesc) -> SetT(typeDesc, [])
@@ -275,7 +289,7 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
             SetT(typeDesc, [value])
         else
             raise TypeException)
-    | SetOf(typeDesc, exprs) -> (let vals = List.map (fun x -> eval x env) exprs in
+    | SetOf(typeDesc, exprs) -> (let vals = evalList exprs env in
         if (checkTypeMultiple typeDesc vals) then
             SetT(typeDesc, vals)
         else
@@ -320,17 +334,22 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
     | Map(exp1, exp2) -> (match (eval exp1 env) with
         | SetT(td, elements) -> SetT(td, map elements (eval exp2 env))
         | _ -> raise TypeException)
-(*
-    | Filter of expression * expression
-    | Map of expression * expression
-*)
     (*| _ -> failwith ("not implemented yet")*)
+
+and evalList (expressions: expressionList) (env: evaluationType environment) =
+    match expressions with
+        | NoExpression -> []
+        | ExpressionList(x, xs) -> (eval x env)::(evalList xs env)
 
 and forall (elements: evaluationType list) (func: evaluationType) = match elements with
     | [] -> true
     | x::xs -> ((
         match func with
-            | Closure(params, body, fenv) -> (match (eval body (bind (List.hd params) x fenv)) with
+            | ClosureT(params, body, fenv) -> (match (eval body (bind (
+                    match params with
+                        | NoIdentifier -> raise TypeException
+                        | IdentifierList(x, _) -> x
+                    ) x fenv)) with
                 | Bool(b) -> b
                 | _ -> raise WrongReturnTypeError)
             | _ -> raise TypeException) && (forall xs func))
@@ -339,7 +358,11 @@ and exists (elements: evaluationType list) (func: evaluationType) = match elemen
     | [] -> false
     | x::xs -> ((
         match func with
-            | Closure(params, body, fenv) -> (match (eval body (bind (List.hd params) x fenv)) with
+            | ClosureT(params, body, fenv) -> (match (eval body (bind (
+                    match params with
+                        | NoIdentifier -> raise TypeException
+                        | IdentifierList(x, _) -> x
+                    ) x fenv)) with
                 | Bool(b) -> b
                 | _ -> raise WrongReturnTypeError)
             |_ -> raise TypeException) || (exists xs func))
@@ -348,7 +371,11 @@ and filter (elements: evaluationType list) (func: evaluationType) = match elemen
     | [] -> []
     | x::xs -> if ((
         match func with
-            | Closure(params, body, fenv) -> (match (eval body (bind (List.hd params) x fenv)) with
+            | ClosureT(params, body, fenv) -> (match (eval body (bind (
+                    match params with
+                        | NoIdentifier -> raise TypeException
+                        | IdentifierList(x, _) -> x
+                    ) x fenv)) with
                 | Bool (b) -> b
                 | _ -> raise WrongReturnTypeError)
             | _ -> raise TypeException
@@ -359,9 +386,13 @@ and filter (elements: evaluationType list) (func: evaluationType) = match elemen
 and map (elements: evaluationType list) (func: evaluationType) = match elements with
     | [] -> []
     | x::xs -> (match func with
-        | Closure(params, body, fenv) -> (
+        | ClosureT(params, body, fenv) -> (
             let els = map xs func in
-            let newelem = (eval body (bind (List.hd params) x fenv)) in
+            let newelem = (eval body (bind (
+                    match params with
+                        | NoIdentifier -> raise TypeException
+                        | IdentifierList(x, _) -> x
+                    ) x fenv)) in
             if (contains els newelem)
                 then els
                 else newelem::els)
@@ -462,38 +493,38 @@ assertEqualsDebug sum (Int 30)
 
 let fibonacci =
     Let("fibonacci",
-        Func(["n"],
+        Func(IdentifierList("n", NoIdentifier),
             If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
                 IntImm(1),
                 Plus(
                     Apply(
                         Den("rec"),
-                        [Plus(Den("n"), IntImm(-1))]
+                        ExpressionList(Plus(Den("n"), IntImm(-1)), NoExpression)
                     ),
                     Apply(
                         Den("rec"),
-                        [Plus(Den("n"), IntImm(-2))]
+                        ExpressionList(Plus(Den("n"), IntImm(-2)), NoExpression)
                     )
                 )
             )
         ),
-        Apply(Den("fibonacci"), [IntImm 10])
+        Apply(Den("fibonacci"), ExpressionList(IntImm 10, NoExpression))
     );;
 
 assertEqualsDebug fibonacci (Int 89)
 
 let fibF =
-    Func(["n"],
+    Func(IdentifierList("n", NoIdentifier),
         If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
             IntImm(1),
             Plus(
                 Apply(
                     Den("rec"),
-                    [Plus(Den("n"), IntImm(-1))]
+                    ExpressionList(Plus(Den("n"), IntImm(-1)), NoExpression)
                 ),
                 Apply(
                     Den("rec"),
-                    [Plus(Den("n"), IntImm(-2))]
+                    ExpressionList(Plus(Den("n"), IntImm(-2)), NoExpression)
                 )
             )
         )
@@ -501,19 +532,128 @@ let fibF =
 
 let fibSet =
     Let("fibonacci", fibF,
-        SetOf(Integer,[
-            Apply(Den("fibonacci"), [IntImm 0]);
-            Apply(Den("fibonacci"), [IntImm 1]);
-            Apply(Den("fibonacci"), [IntImm 2]);
-            Apply(Den("fibonacci"), [IntImm 3]);
-            Apply(Den("fibonacci"), [IntImm 4]);
-            Apply(Den("fibonacci"), [IntImm 5]);
-            Apply(Den("fibonacci"), [IntImm 6]);
-            Apply(Den("fibonacci"), [IntImm 7]);
-            Apply(Den("fibonacci"), [IntImm 8]);
-            Apply(Den("fibonacci"), [IntImm 9]);
-        ])
+        SetOf(Integer,
+            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 0, NoExpression)),
+            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 1, NoExpression)),
+            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 2, NoExpression)),
+            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 3, NoExpression)),
+            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 4, NoExpression)),
+            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 5, NoExpression)),
+            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 6, NoExpression)),
+            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 7, NoExpression)),
+            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 8, NoExpression)),
+            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 9, NoExpression)),
+            NoExpression))))))))))
+        )
     )
 ;;
 
 print_debug (eval fibSet emptyEvaluationEnvironment)
+
+
+let rec staticTypeCheck (expression: expression) (env: typeDescriptor environment) =
+    match expression with
+        | IntImm(_) -> Integer
+        | StringImm(_) -> String
+        | BoolImm(_) -> Boolean
+        | Times(op1, op2) -> (match (staticTypeCheck op1 env, staticTypeCheck op2 env) with
+            | Integer, Integer -> Integer
+            | _,_ -> raise TypeException)
+        | Plus(op1, op2) -> (match (staticTypeCheck	op1 env, staticTypeCheck op2 env) with
+            | Integer, Integer -> Integer
+            | _,_ -> raise TypeException)
+        | Eq(_,_) -> Boolean
+        | IsZero(op) -> (match (staticTypeCheck	op env) with
+            | Integer -> Boolean
+            | _ -> raise TypeException)
+        | Or(op1, op2) -> (match (staticTypeCheck op1 env, staticTypeCheck op2 env) with
+            | Boolean, Boolean -> Boolean
+            | _,_ -> raise TypeException)
+        | And(op1, op2) -> (match (staticTypeCheck op1 env, staticTypeCheck op2 env) with
+            | Boolean, Boolean -> Boolean
+            | _,_ -> raise TypeException)
+        | Not(op) -> (match (staticTypeCheck op env) with
+            | Boolean -> Boolean
+            | _ -> raise TypeException)
+        | Den(id) -> env id
+        | If(guard, branch1, branch2) -> (match staticTypeCheck guard env with
+            | Boolean -> (let type1 = staticTypeCheck branch1 env in let type2 = staticTypeCheck branch2 env in
+                if type1=type2
+                    then type1
+                    else raise TypeException)
+            | _ -> raise TypeException)
+        | Let(id, assignment, block) -> staticTypeCheck block (bind id (staticTypeCheck assignment env) env)
+        (*| Func(idList, block) -> Closure(NoType, )
+        | Apply of expression * expressionList
+        | EmptySet(typeDesc) -> Set(typeDesc)
+        | SingletonSet(typeDesc, _) -> Set(typeDesc)
+        | SetOf(typeDesc, _) -> Set(typeDesc)
+        | SetPut of expression * expression
+        | SetRemove of expression * expression
+        | SetIsEmpty of expression
+        | SetContains of expression * expression
+        | SetIsSubset of expression * expression
+        | SetMin of expression
+        | SetMax of expression
+        | Print(expr) -> staticTypeCheck expr env
+        | GreaterThan of expression * expression
+        | LessThan of expression * expression
+        | Forall of expression * expression
+        | Exists of expression * expression
+        | Filter of expression * expression
+        | Map of expression * expression*)
+
+let emptyTypeEnvironment = fun (x: identifier) -> Unknown
+
+let rec inferUnboundValues (expr: expression) (env: typeDescriptor environment) =
+    match expr with
+        | IntImm(_) -> emptyTypeEnvironment
+        | StringImm(_) -> emptyTypeEnvironment
+        | BoolImm(_) -> emptyTypeEnvironment
+        | Times(op1, op2) -> (match (op1, op2) with
+            | Den(d1), Den(d2) -> (match (env d1, env d2) with
+                | Unknown, Unknown -> bind d1 Integer (bind d2 Integer env)
+                | Unknown, _ -> bind d1 Integer env
+                | _, Unknown -> bind d2 Integer env
+                | _, _ -> emptyTypeEnvironment)
+            | Den(d), _ -> (match env d with
+                | Unknown -> bind d Integer (inferUnboundValues op2 env))
+            | _, Den(d) -> (match env d with
+                | Unknown -> bind d Integer (inferUnboundValues op1 env)))
+        | Plus(op1, op2) -> (match (op1, op2) with
+            | Den(d1), Den(d2) -> (match (env d1, env d2) with
+                | Unknown, Unknown -> bind d1 Integer (bind d2 Integer env)
+                | Unknown, _ -> bind d1 Integer env
+                | _, Unknown -> bind d2 Integer env
+                | _, _ -> emptyTypeEnvironment)
+            | Den(d), _ -> (match env d with
+                | Unknown -> bind d Integer (inferUnboundValues op2 env))
+            | _, Den(d) -> (match env d with
+                | Unknown -> bind d Integer (inferUnboundValues op1 env)))
+        (*| Eq of expression * expression
+        | IsZero of expression
+        | Or of expression * expression
+        | And of expression * expression
+        | Not of expression
+        | Den of identifier
+        | If of expression * expression * expression
+        | Let of identifier * expression * expression
+        | Func of identifierList * expression
+        | Apply of expression * expressionList
+        | EmptySet of typeDescriptor
+        | SingletonSet of typeDescriptor * expression
+        | SetOf of typeDescriptor * expressionList
+        | SetPut of expression * expression
+        | SetRemove of expression * expression
+        | SetIsEmpty of expression
+        | SetContains of expression * expression
+        | SetIsSubset of expression * expression
+        | SetMin of expression
+        | SetMax of expression
+        | Print of expression
+        | GreaterThan of expression * expression
+        | LessThan of expression * expression
+        | Forall of expression * expression
+        | Exists of expression * expression
+        | Filter of expression * expression
+        | Map of expression * expression*)
