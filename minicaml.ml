@@ -44,7 +44,7 @@ type expression =
     | Den of identifier
     | If of expression * expression * expression
     | Let of identifier * expression * expression
-    | Func of identifierList * expression
+    | Func of identifierList * typeDescriptorList * typeDescriptor * expression
     | Apply of expression * expressionList
     | EmptySet of typeDescriptor
     | SingletonSet of typeDescriptor * expression
@@ -73,7 +73,7 @@ type evaluationType =
     | Bool of bool
     | Str of string
     | SetT of typeDescriptor * evaluationType list
-    | ClosureT of identifierList * expression * evaluationType environment
+    | ClosureT of identifierList * typeDescriptorList * typeDescriptor * expression * evaluationType environment
     (*| Unbound*)
 
 
@@ -109,6 +109,9 @@ let rec checkType (evType: evaluationType) (typeDesc: typeDescriptor) = match ty
     | Set(tDesc) -> (match evType with
         | SetT(tDesc, elList) -> checkTypeMultiple tDesc elList
         | _ -> false)
+    | Closure(paramTDs, returnTD) -> (match evType with
+        | ClosureT(_, paramTDs2, returnTD2, _, _) when ((paramTDs = paramTDs2) && (returnTD = returnTD2))-> true
+        | _ -> false)
     (*| _ -> raise InvalidTypeDescriptor*)
 
 and checkTypeMultiple (tDesc: typeDescriptor) (elements: evaluationType list) =
@@ -121,7 +124,7 @@ let rec getTypeDescriptor (evType: evaluationType) = match evType with
     | Bool(_) -> Boolean
     | Str(_) -> String
     | SetT(x, _) -> Set(x)
-    | ClosureT(_,_,_) -> raise RuntimeException
+    | ClosureT(_,_,_,_,_) -> raise RuntimeException
 
 
 (*Print functions*)
@@ -132,6 +135,12 @@ let rec printTypeDescriptor (tDesc: typeDescriptor) = match tDesc with
     | Boolean -> print_string "Boolean"
     | String -> print_string "String"
     | Set(x) -> print_string "Set(" ; printTypeDescriptor x ; print_string ")"
+    | Closure(paramTDs, retTD) -> print_string "Closure: " ; printTypeDescriptorList paramTDs ; print_string "-> " ; printTypeDescriptor retTD
+
+and printTypeDescriptorList (tdList: typeDescriptorList) = match tdList with
+    | NoType -> print_string "";
+    | TypeDescriptorList(x, NoType) -> printTypeDescriptor x ; print_string " "
+    | TypeDescriptorList(x, tdl) -> printTypeDescriptor x ; print_string " * " ; printTypeDescriptorList tdl
 
 let rec printEvaluationType (evType: evaluationType) = match evType with
     | Int(x) -> print_int x
@@ -144,12 +153,17 @@ let rec printEvaluationType (evType: evaluationType) = match evType with
                 | x::xs -> printEvaluationType x ; print_string ", " ; p xs
             in p x
         ) ; print_string ")"
-    | ClosureT(id,body,_) -> print_string "ClosureT(" ;
+    | ClosureT(id, idTD, retTD, _, _) -> print_string "ClosureT(" ;
         (let rec pID l = match l with
             | NoIdentifier -> print_string ""
             | IdentifierList(x, NoIdentifier) -> print_string x
             | IdentifierList(x, xs) -> print_string x ; print_string ", " ; pID xs
         in pID id);
+        (let rec pID l = match l with
+            | NoType -> print_string ""
+            | TypeDescriptorList(x, NoType) -> printTypeDescriptor x
+            | TypeDescriptorList(x, xs) -> printTypeDescriptor x ; print_string ", " ; pID xs
+        in pID idTD);   (*TODO:Check this function*)
         print_string ") <";
         print_string "expr";
         print_string ">"
@@ -278,9 +292,9 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
                 | (_, _) -> raise TypeException
             )
         )
-    | Func(identifiers, body) -> ClosureT(identifiers, body, env)
+    | Func(identifiers, parameterTypes, outputType, body) -> ClosureT(identifiers, parameterTypes, outputType, body, env)
     | Apply(func, parameters) -> (let f = (eval func env) in match f with
-            | ClosureT(identifiers, body, fenv) ->
+            | ClosureT(identifiers, _, _, body, fenv) ->
                     eval body (bindList identifiers (evalList parameters env) (bind "rec" f fenv))
             | _ -> raise ApplyingNonFunctional
         )
@@ -346,7 +360,7 @@ and forall (elements: evaluationType list) (func: evaluationType) = match elemen
     | [] -> true
     | x::xs -> ((
         match func with
-            | ClosureT(params, body, fenv) -> (match (eval body (bind (
+            | ClosureT(params, _, _, body, fenv) -> (match (eval body (bind (
                     match params with
                         | NoIdentifier -> raise TypeException
                         | IdentifierList(x, _) -> x
@@ -359,7 +373,7 @@ and exists (elements: evaluationType list) (func: evaluationType) = match elemen
     | [] -> false
     | x::xs -> ((
         match func with
-            | ClosureT(params, body, fenv) -> (match (eval body (bind (
+            | ClosureT(params, _, _, body, fenv) -> (match (eval body (bind (
                     match params with
                         | NoIdentifier -> raise TypeException
                         | IdentifierList(x, _) -> x
@@ -372,7 +386,7 @@ and filter (elements: evaluationType list) (func: evaluationType) = match elemen
     | [] -> []
     | x::xs -> if ((
         match func with
-            | ClosureT(params, body, fenv) -> (match (eval body (bind (
+            | ClosureT(params, _, _, body, fenv) -> (match (eval body (bind (
                     match params with
                         | NoIdentifier -> raise TypeException
                         | IdentifierList(x, _) -> x
@@ -387,7 +401,7 @@ and filter (elements: evaluationType list) (func: evaluationType) = match elemen
 and map (elements: evaluationType list) (func: evaluationType) = match elements with
     | [] -> []
     | x::xs -> (match func with
-        | ClosureT(params, body, fenv) -> (
+        | ClosureT(params, _, _, body, fenv) -> (
             let els = map xs func in
             let newelem = (eval body (bind (
                     match params with

@@ -154,3 +154,5 @@ print_debug (eval fibSet emptyEvaluationEnvironment)
 EndFibonacci*)
 
 printTypeDescriptor (staticTypeCheck (IntImm(10)) emptyTypeEnvironment);;
+(*printTypeDescriptor (staticTypeCheck (Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a"))) emptyTypeEnvironment);;*)
+printTypeDescriptor (Closure(TypeDescriptorList(Integer, TypeDescriptorList(Integer, NoType)), Integer));;
