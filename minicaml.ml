@@ -25,7 +25,6 @@ type typeDescriptor =
     | String
     | Set of typeDescriptor
     | Closure of typeDescriptorList * typeDescriptor
-    | Unknown
 
 and typeDescriptorList =
     | NoType
@@ -83,6 +82,8 @@ type evaluationType =
 (*Environment*)
 
 let emptyEvaluationEnvironment = fun (x: identifier) -> raise IdentifierNotFound
+
+let emptyTypeEnvironment = fun (x: identifier) -> raise IdentifierNotFound
 
 let bind (id: identifier) (v: 'a) (env: 'a environment) =
     fun (x: identifier) -> if x = id
@@ -397,158 +398,13 @@ and map (elements: evaluationType list) (func: evaluationType) = match elements 
                 then els
                 else newelem::els)
         | _ -> raise TypeException)
-(*Tests*)
-(*
-let x = Let("x", IntImm(10), Times(Den("x"), IntImm 7))
-let v = printEvaluationType (eval x emptyEvaluationEnvironment)
-let v = print_string "\n"
-let x = IsZero(IntImm(0))
-let v = printEvaluationType (eval x emptyEvaluationEnvironment)
-let v = print_string "\n"
-let x = Or(BoolImm(false), BoolImm(false))
-let v = printEvaluationType (eval x emptyEvaluationEnvironment)
-let v = print_string "\n"
-let x = If(Or(BoolImm(false), BoolImm(false)), IntImm(10), IntImm(20))
-let v = printEvaluationType (eval x emptyEvaluationEnvironment)
-let v = print_string "\n"
-let x = Let("f", Func(["a"; "b"], Times(Den("a"), Den("b"))), Apply(Den("f"), [IntImm(10); IntImm(4)]))
-let x = Let("f", Func(["a"; "b"], Times(Den("a"), Den("b"))), Den("f"))
-let v = printEvaluationType (eval x emptyEvaluationEnvironment)
-let v = print_string "\n"
-
-let x = SetT(Set(Integer), [SetT(Integer, [Int 1])])
-let v = printEvaluationType x
-let v = print_string "\n"
-
-let td = printTypeDescriptor (getTypeDescriptor ( Int 10 ))
-
-let x = eval (EmptySet(Integer)) emptyEvaluationEnvironment;;
-printEvaluationType x;
-print_string "\n";
-printTypeDescriptor (getTypeDescriptor x);
-print_string "\n";;
-
-
-let x = eval (SingletonSet(Integer, IntImm 7 )) emptyEvaluationEnvironment;;
-printEvaluationType x;
-print_string "\n";
-printTypeDescriptor (getTypeDescriptor x);
-print_string "\n";;
-
-let x = eval (SetOf(Integer, [IntImm 10; IntImm 20; Times(IntImm 5, IntImm 6)])) emptyEvaluationEnvironment;;
-printEvaluationType x;
-print_string "\n";
-printTypeDescriptor (getTypeDescriptor x);
-print_string "\n";;
-
-let x = eval (SetPut(SetOf(Integer, [IntImm 10; IntImm 20; Times(IntImm 5, IntImm 6)]), IntImm(10))) emptyEvaluationEnvironment;;
-printEvaluationType x;
-print_string "\n";
-printTypeDescriptor (getTypeDescriptor x);
-print_string "\n";;
-
-let recursive = (
-    Let("r", Func(["n"],
-        If(IsZero(Den("n")),
-            Den("n"),
-            Apply(Den("rec"), [Plus(Print(Den("n")), IntImm(-1))])
-        )
-    ),
-    Apply(Den("r"), [IntImm 10])))
-
-let x = eval recursive emptyEvaluationEnvironment;;
-printEvaluationType x;
-print_string "\n";
-printTypeDescriptor (getTypeDescriptor x);
-print_string "\n";;
-*)
 
 
 
 
-exception AssertException
 
-let print_debug (evt: evaluationType) =
-    printEvaluationType evt;
-    print_string "\n";
-    printTypeDescriptor (getTypeDescriptor evt);
-    print_string "\n"
 
-let assertEquals (expr: expression) (evt: evaluationType) (debugPrint: bool) = let res = eval expr emptyEvaluationEnvironment in
-    (if debugPrint then
-        print_debug res
-    else
-        print_string "");
 
-    if evtEquals res evt then
-        print_string "Passed\n"
-    else
-        raise AssertException
-;;
-
-let assertEqualsDebug a b = assertEquals a b true;;
-
-let sum = Plus(IntImm 10, IntImm 20);;
-assertEqualsDebug sum (Int 30)
-
-let fibonacci =
-    Let("fibonacci",
-        Func(IdentifierList("n", NoIdentifier),
-            If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
-                IntImm(1),
-                Plus(
-                    Apply(
-                        Den("rec"),
-                        ExpressionList(Plus(Den("n"), IntImm(-1)), NoExpression)
-                    ),
-                    Apply(
-                        Den("rec"),
-                        ExpressionList(Plus(Den("n"), IntImm(-2)), NoExpression)
-                    )
-                )
-            )
-        ),
-        Apply(Den("fibonacci"), ExpressionList(IntImm 10, NoExpression))
-    );;
-
-assertEqualsDebug fibonacci (Int 89)
-
-let fibF =
-    Func(IdentifierList("n", NoIdentifier),
-        If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
-            IntImm(1),
-            Plus(
-                Apply(
-                    Den("rec"),
-                    ExpressionList(Plus(Den("n"), IntImm(-1)), NoExpression)
-                ),
-                Apply(
-                    Den("rec"),
-                    ExpressionList(Plus(Den("n"), IntImm(-2)), NoExpression)
-                )
-            )
-        )
-    )
-
-let fibSet =
-    Let("fibonacci", fibF,
-        SetOf(Integer,
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 0, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 1, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 2, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 3, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 4, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 5, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 6, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 7, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 8, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 9, NoExpression)),
-            NoExpression))))))))))
-        )
-    )
-;;
-
-print_debug (eval fibSet emptyEvaluationEnvironment)
 
 
 let rec staticTypeCheck (expression: expression) (env: typeDescriptor environment) =
@@ -584,26 +440,52 @@ let rec staticTypeCheck (expression: expression) (env: typeDescriptor environmen
             | _ -> raise TypeException)
         | Let(id, assignment, block) -> staticTypeCheck block (bind id (staticTypeCheck assignment env) env)
         (*| Func(idList, block) -> Closure(NoType, )
-        | Apply of expression * expressionList
+        | Apply of expression * expressionList*)
         | EmptySet(typeDesc) -> Set(typeDesc)
         | SingletonSet(typeDesc, _) -> Set(typeDesc)
         | SetOf(typeDesc, _) -> Set(typeDesc)
-        | SetPut of expression * expression
-        | SetRemove of expression * expression
-        | SetIsEmpty of expression
-        | SetContains of expression * expression
-        | SetIsSubset of expression * expression
-        | SetMin of expression
-        | SetMax of expression
+        | SetPut(setExpr, valExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck valExpr env) with
+            | Set(setTypeDesc), valTypeDesc -> Set(setTypeDesc)
+            | _, _ -> raise TypeException)
+        | SetRemove(setExpr, valExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck valExpr env) with
+            | Set(setTypeDesc), valTypeDesc when setTypeDesc = valTypeDesc -> Set(setTypeDesc)
+            | _, _ -> raise TypeException)
+        | SetIsEmpty(setExpr) -> (match staticTypeCheck setExpr env with
+            | Set(typeDesc) -> Boolean
+            | _ -> raise TypeException)
+        | SetContains(setExpr, valExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck valExpr env) with
+            | Set(setTypeDesc), valTypeDesc when setTypeDesc = valTypeDesc -> Boolean
+            | _, _ -> raise TypeException)
+        | SetIsSubset(setExpr, subsetExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck subsetExpr env) with
+            | Set(setTypeDesc), Set(subsetTypeDesc) when setTypeDesc = subsetTypeDesc -> Boolean
+            | _, _ -> raise TypeException)
+        |SetMin(setExpr) -> (match staticTypeCheck setExpr env with
+            | Set(typeDesc) -> typeDesc
+            | _ -> raise TypeException)
+        |SetMax(setExpr) -> (match staticTypeCheck setExpr env with
+            | Set(typeDesc) -> typeDesc
+            | _ -> raise TypeException)
         | Print(expr) -> staticTypeCheck expr env
-        | GreaterThan of expression * expression
-        | LessThan of expression * expression
+        | GreaterThan(expr1, expr2) -> (match (staticTypeCheck expr1 env, staticTypeCheck expr2 env) with
+            | Integer, Integer -> Boolean
+            | Boolean, Boolean -> Boolean
+            | String, String -> Boolean
+            | Set(_), Set(_) -> Boolean
+            | _, _ -> raise TypeException)
+        | LessThan(expr1, expr2) -> (match (staticTypeCheck expr1 env, staticTypeCheck expr2 env) with
+            | Integer, Integer -> Boolean
+            | Boolean, Boolean -> Boolean
+            | String, String -> Boolean
+            | Set(_), Set(_) -> Boolean
+            | _, _ -> raise TypeException)
+        (*TODO: Finish higher order functions static checking
         | Forall of expression * expression
         | Exists of expression * expression
         | Filter of expression * expression
-        | Map of expression * expression*)
+        | Map of expression * expression
+        *)
 
-let emptyTypeEnvironment = fun (x: identifier) -> Unknown
+(*
 
 let rec inferUnboundValues (expr: expression) (env: typeDescriptor environment) =
     match expr with
@@ -657,3 +539,4 @@ let rec inferUnboundValues (expr: expression) (env: typeDescriptor environment) 
         | Exists of expression * expression
         | Filter of expression * expression
         | Map of expression * expression*)
+*)
