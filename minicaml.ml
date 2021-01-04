@@ -349,7 +349,7 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
     | Map(exp1, exp2) -> (match (eval exp1 env) with
         | SetT(td, elements) -> SetT(td, map elements (eval exp2 env))
         | _ -> raise TypeException)
-    (*| _ -> failwith ("not implemented yet")*)
+    (*TODO: remove | _ -> failwith ("not implemented yet")*)
 
 and evalList (expressions: expressionList) (env: evaluationType environment) =
     match expressions with
@@ -501,15 +501,29 @@ let rec staticTypeCheck (expression: expression) (env: typeDescriptor environmen
             | String, String -> Boolean
             | Set(_), Set(_) -> Boolean
             | _, _ -> raise TypeException)
-        (*TODO: Finish higher order functions static checking
-        | Forall of expression * expression
-        | Exists of expression * expression
-        | Filter of expression * expression
-        | Map of expression * expression
-        *)
+        | Forall(setExpr, funcExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck funcExpr env) with
+            | Set(typeDesc), Closure(tdList, retTD) -> (match tdList with
+                | TypeDescriptorList(td, NoType) when (td = typeDesc) && (retTD = Boolean) -> Boolean
+                | _ -> raise TypeException)
+            | _ -> raise TypeException)
+        | Exists(setExpr, funcExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck funcExpr env) with
+            | Set(typeDesc), Closure(tdList, retTD) -> (match tdList with
+                | TypeDescriptorList(td, NoType) when (td = typeDesc) && (retTD = Boolean) -> Boolean
+                | _ -> raise TypeException)
+            | _, _ -> raise TypeException)
+        | Filter(setExpr, funcExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck funcExpr env) with
+            | Set(typeDesc), Closure(tdList, retTD) -> (match tdList with
+                | TypeDescriptorList(td, NoType) when (td = typeDesc) && (retTD = Boolean) -> Set(typeDesc)
+                | _ -> raise TypeException)
+            | _, _ -> raise TypeException)
+        | Map(setExpr, funcExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck funcExpr env) with
+            | Set(typeDesc), Closure(tdList, retTD) -> (match tdList with
+                | TypeDescriptorList(td, NoType) when (td = typeDesc) -> Set(retTD)
+                | _ -> raise TypeException)
+            | _, _ -> raise TypeException)
+
 
 (*
-
 let rec inferUnboundValues (expr: expression) (env: typeDescriptor environment) =
     match expr with
         | IntImm(_) -> emptyTypeEnvironment
