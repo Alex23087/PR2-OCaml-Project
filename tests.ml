@@ -153,6 +153,7 @@ let fibSet =
 print_debug (eval fibSet emptyEvaluationEnvironment)
 EndFibonacci*)
 
-printTypeDescriptor (staticTypeCheck (IntImm(10)) emptyTypeEnvironment);;
-(*printTypeDescriptor (staticTypeCheck (Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a"))) emptyTypeEnvironment);;*)
-printTypeDescriptor (Closure(TypeDescriptorList(Integer, TypeDescriptorList(Integer, NoType)), Integer));;
+printTypeDescriptor (staticTypeCheck (IntImm(10)) emptyTypeEnvironment) ; print_string "\n";;
+printTypeDescriptor (staticTypeCheck (Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a"))) emptyTypeEnvironment) ; print_string "\n";;
+printTypeDescriptor (staticTypeCheck (Let("f", Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a")), Apply(Den("f"), ExpressionList(BoolImm true, NoExpression)))) emptyTypeEnvironment) ; print_string "\n";;
+printTypeDescriptor (Closure(TypeDescriptorList(Integer, TypeDescriptorList(Integer, NoType)), Integer)) ; print_string "\n";;

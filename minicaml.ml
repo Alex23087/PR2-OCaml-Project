@@ -453,8 +453,17 @@ let rec staticTypeCheck (expression: expression) (env: typeDescriptor environmen
                     else raise TypeException)
             | _ -> raise TypeException)
         | Let(id, assignment, block) -> staticTypeCheck block (bind id (staticTypeCheck assignment env) env)
-        (*| Func(idList, block) -> Closure(NoType, )
-        | Apply of expression * expressionList*)
+        | Func(idList, paramTDs, returnTD, block) -> Closure(paramTDs, returnTD)
+        | Apply(funcExpr, paramsExprs) -> (match (staticTypeCheck funcExpr env) with
+            | Closure(paramTDs, returnTD) -> (let rec checkParams paramTypeDescList paramExprList = match (paramTypeDescList, paramExprList) with
+                | NoType, NoExpression -> true
+                | NoType, ExpressionList(_,_) -> false
+                | TypeDescriptorList(_,_), NoExpression -> false
+                | TypeDescriptorList(td, tdl), ExpressionList(exp, expl) -> (let expT = staticTypeCheck exp env in if td = expT then (checkParams tdl expl) else false)
+                in if (checkParams paramTDs paramsExprs)
+                    then returnTD
+                    else raise TypeException)
+            | _ -> raise TypeException)
         | EmptySet(typeDesc) -> Set(typeDesc)
         | SingletonSet(typeDesc, _) -> Set(typeDesc)
         | SetOf(typeDesc, _) -> Set(typeDesc)
@@ -473,10 +482,10 @@ let rec staticTypeCheck (expression: expression) (env: typeDescriptor environmen
         | SetIsSubset(setExpr, subsetExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck subsetExpr env) with
             | Set(setTypeDesc), Set(subsetTypeDesc) when setTypeDesc = subsetTypeDesc -> Boolean
             | _, _ -> raise TypeException)
-        |SetMin(setExpr) -> (match staticTypeCheck setExpr env with
+        | SetMin(setExpr) -> (match staticTypeCheck setExpr env with
             | Set(typeDesc) -> typeDesc
             | _ -> raise TypeException)
-        |SetMax(setExpr) -> (match staticTypeCheck setExpr env with
+        | SetMax(setExpr) -> (match staticTypeCheck setExpr env with
             | Set(typeDesc) -> typeDesc
             | _ -> raise TypeException)
         | Print(expr) -> staticTypeCheck expr env
