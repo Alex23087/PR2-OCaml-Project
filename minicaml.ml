@@ -172,6 +172,10 @@ let rec printEvaluationType (evType: evaluationType) = match evType with
         print_string ">"
     (*TODO: remove | Unbound -> print_string "Unbound"*)
 
+let rec printEVTlist (l: evaluationType list) = match l with
+    | [] -> print_string ""
+    | x::xs -> printEvaluationType x ; printEVTlist xs
+
 (*Utility functions*)
 let rec evtEquals (elem1: evaluationType) (elem2: evaluationType) = match (elem1, elem2) with
     | Int(a), Int(b) -> a=b
@@ -179,6 +183,7 @@ let rec evtEquals (elem1: evaluationType) (elem2: evaluationType) = match (elem1
     | Str(a), Str(b) -> a=b
     | SetT(td1, els1), SetT(td2, els2) -> (td1 = td2) && (evtEqualsSet els1 els2)
     | _ -> raise DynamicTypeException
+    (*TODO: add closure equality maybe?*)
 
 and contains (lst: evaluationType list) (elem: evaluationType) = match lst with
     | [] -> false
@@ -193,8 +198,8 @@ and evtEqualsSet (ls1: evaluationType list) (ls2: evaluationType list) = match (
 and listWithout (ls: evaluationType list) (el:evaluationType) = match ls with
     | [] -> []
     | x::xs -> (if (evtEquals x el)
-        then x::(listWithout xs el)
-        else (listWithout xs el))
+        then (listWithout xs el)
+        else x::(listWithout xs el))
 
 let rec typeDepth (typeDesc: typeDescriptor) = match typeDesc with
     | Set(td) -> 1 + (typeDepth td)
@@ -314,7 +319,10 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
             raise DynamicTypeException)
     | SetOf(typeDesc, exprs) -> (let vals = evalList exprs env in
         if (checkTypeMultiple vals typeDesc) then
-            SetT(typeDesc, vals)
+            (let rec addAll ls vs = match vs with       (*Adds all elements without duplicates*)
+                | [] -> ls
+                | x::xs -> if contains ls x then addAll ls xs else addAll (x::ls) xs
+            in SetT(typeDesc, addAll [] vals))
         else
             raise DynamicTypeException)
     | SetPut(exp1, exp2) -> setPut (eval exp1 env) (eval exp2 env)

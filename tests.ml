@@ -90,6 +90,19 @@ let assertEquals (expr: expression) (evt: evaluationType) (debugPrint: bool) = l
 
 let assertEqualsDebug a b = assertEquals a b true;;
 
+let assertDynamicTypeException (expr: expression) (debugPrint: bool) =
+    try let res = eval expr emptyEvaluationEnvironment in
+        (if debugPrint then
+            print_debug res
+        else
+            print_string ""); raise AssertException
+    with DynamicTypeException -> print_string "Passed\n"
+;;
+
+let assertDynamicTypeExceptionDebug a = assertDynamicTypeException a true;;
+
+
+(*Fibonacci
 let sum = Plus(IntImm 10, IntImm 20);;
 assertEqualsDebug sum (Int 30)
 
@@ -150,8 +163,8 @@ let fibSet =
     )
 ;;
 
-print_debug (eval fibSet emptyEvaluationEnvironment)
-(*EndFibonacci*)
+(*print_debug (eval fibSet emptyEvaluationEnvironment)*)
+EndFibonacci*)
 
 (*printTypeDescriptor (staticTypeCheck (IntImm(10)) emptyTypeEnvironment) ; print_string "\n";;
 printTypeDescriptor (staticTypeCheck (Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a"))) emptyTypeEnvironment) ; print_string "\n";;
@@ -160,3 +173,128 @@ printTypeDescriptor (Closure(TypeDescriptorList(Integer, TypeDescriptorList(Inte
 
 printEvaluationType (eval (Let("f", Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a")), Apply(Den("f"), ExpressionList(IntImm 10, NoExpression)))) emptyEvaluationEnvironment) ; print_string "\n";;
 printEvaluationType (eval (Let("f", Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a")), Apply(Den("f"), ExpressionList(IntImm 10, NoExpression)))) emptyEvaluationEnvironment) ; print_string "\n";;*)
+
+
+
+
+
+(*Expressions Tests*)
+
+
+(*TODO: finish expressions tests
+
+    | SingletonSet of typeDescriptor * expression
+    | SetOf of typeDescriptor * expressionList
+    | SetPut of expression * expression
+    | SetRemove of expression * expression
+    | SetIsEmpty of expression
+    | SetContains of expression * expression
+    | SetIsSubset of expression * expression
+    | SetMin of expression
+    | SetMax of expression
+    | Print of expression
+    | GreaterThan of expression * expression
+    | LessThan of expression * expression
+    | Forall of expression * expression
+    | Exists of expression * expression
+    | Filter of expression * expression
+    | Map of expression * expression
+*)
+
+(*Immediates*)
+assertEquals (IntImm 10) (Int 10) false;;
+assertEquals (StringImm "test") (Str "test") false;;
+assertEquals (BoolImm true) (Bool true) false;;
+
+(*Times*)
+assertEquals (Times(IntImm 10, IntImm 4)) (Int 40) false;;
+assertDynamicTypeException (Times(IntImm 10, BoolImm true)) false;;
+
+(*Plus*)
+assertEquals (Plus(IntImm 10, IntImm 4)) (Int 14) false;;
+assertDynamicTypeException (Plus(IntImm 10, BoolImm true)) false;;
+
+(*Eq*)
+assertEquals (Eq(IntImm 10, IntImm 10)) (Bool true) false;;
+assertEquals (Eq(BoolImm true, BoolImm false)) (Bool false) false;;
+assertEquals (Eq(StringImm "a", StringImm "a")) (Bool true) false;;
+assertEquals (Eq(
+    SetOf(Integer, ExpressionList(IntImm 10, ExpressionList(IntImm 20, ExpressionList(IntImm 20, NoExpression)))),
+    SetOf(Integer, ExpressionList(IntImm 20, ExpressionList(IntImm 10, ExpressionList(IntImm 20, NoExpression))))))
+    (Bool true) false;;
+assertDynamicTypeException (Eq(IntImm(10), BoolImm true)) false;;
+
+(*IsZero*)
+assertEquals (IsZero(IntImm 0)) (Bool true) false;;
+assertDynamicTypeException (IsZero(BoolImm true)) false;;
+
+(*Or*)
+assertEquals (Or(BoolImm true, BoolImm false)) (Bool true) false;;
+assertDynamicTypeException (Or(BoolImm false, IntImm 0)) false;;
+
+(*And*)
+assertEquals (And(BoolImm true, BoolImm false)) (Bool false) false;;
+assertDynamicTypeException (And(BoolImm false, IntImm 0)) false;;
+
+(*Not*)
+assertEquals (Not(BoolImm false)) (Bool true) false;;
+assertDynamicTypeException (Not(IntImm 0)) false;;
+
+(*If*)
+assertEquals (If(BoolImm true, BoolImm false, BoolImm true)) (Bool false) false;;
+assertDynamicTypeException (If(IntImm 0, BoolImm false, BoolImm true)) false;;
+
+(*Let + Den*)
+assertEquals (Let("a", IntImm 10, Den("a"))) (Int 10) false;;
+
+(*Func + Apply*)
+assertEquals (
+        Apply(
+            Func(
+                IdentifierList("n", NoIdentifier),
+                TypeDescriptorList(Integer, NoType),
+                Integer,
+                Den("n")
+            ),
+            ExpressionList(IntImm 10, NoExpression)
+        )
+    )
+    (Int 10) false;;
+
+assertDynamicTypeException (    (*Passing wrongly typed parameter*)
+        Apply(
+            Func(
+                IdentifierList("n", NoIdentifier),
+                TypeDescriptorList(Integer, NoType),
+                Integer,
+                Den("n")
+            ),
+            ExpressionList(StringImm "test", NoExpression)
+        )
+    )
+    false;;
+
+assertDynamicTypeException (    (*Passing wrong return type*)
+        Apply(
+            Func(
+                IdentifierList("n", NoIdentifier),
+                TypeDescriptorList(Integer, NoType),
+                String,
+                Den("n")
+            ),
+            ExpressionList(IntImm 10, NoExpression)
+        )
+    )
+    false;;
+
+(*EmptySet*)
+assertEquals (EmptySet(Integer)) (SetT(Integer, [])) false;;
+
+(*SingletonSet*)
+assertEquals (SingletonSet(Integer, IntImm 10)) (SetT(Integer, [Int 10])) false;;
+assertDynamicTypeException (SingletonSet(Integer, BoolImm true)) false;;
+
+(*SetOf*)
+assertEquals (SetOf(Integer, ExpressionList(IntImm 10, ExpressionList(IntImm 20, NoExpression)))) (SetT(Integer, [Int 20; Int 10])) false;;
+assertEquals (SetOf(Integer, NoExpression)) (SetT(Integer, [])) false;;
+assertDynamicTypeException (SetOf(Integer, ExpressionList(IntImm 10, ExpressionList(BoolImm false, NoExpression)))) false;;
