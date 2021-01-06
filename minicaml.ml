@@ -1,13 +1,11 @@
 (*Exceptions*)
 exception IdentifierNotFound
-exception InvalidTypeDescriptor
-exception RuntimeException
 exception ApplyingNonFunctional
 exception IncorrectParameterListLength
-exception TypeException
-exception InterpreterException
+exception StaticTypeException
+exception DynamicTypeException
 exception EmptySetException
-exception WrongReturnTypeError
+exception WrongReturnTypeException
 
 
 (*Types*)
@@ -106,25 +104,30 @@ let rec checkType (evType: evaluationType) (typeDesc: typeDescriptor) = match ty
     | String -> (match evType with
         | Str(_) -> true
         | _ -> false)
-    | Set(tDesc) -> (match evType with
-        | SetT(tDesc, elList) -> checkTypeMultiple tDesc elList
+    | Set(tDescTD) -> (match evType with
+        | SetT(tDesc, elList) when tDescTD = tDesc -> checkTypeMultiple elList tDesc
         | _ -> false)
     | Closure(paramTDs, returnTD) -> (match evType with
         | ClosureT(_, paramTDs2, returnTD2, _, _) when ((paramTDs = paramTDs2) && (returnTD = returnTD2))-> true
         | _ -> false)
-    (*| _ -> raise InvalidTypeDescriptor*)
 
-and checkTypeMultiple (tDesc: typeDescriptor) (elements: evaluationType list) =
+and checkTypeMultiple (elements: evaluationType list) (tDesc: typeDescriptor) =
     match elements with
         | [] -> true
-        | el::els -> (checkType el tDesc) && (checkTypeMultiple tDesc els)
+        | el::els -> (checkType el tDesc) && (checkTypeMultiple els tDesc)
+
+and checkTypeFunc (params: evaluationType list) (tDescs: typeDescriptorList) = match (params, tDescs) with
+    | [], NoType -> true
+    | [], TypeDescriptorList(_, _) -> false
+    | x::xs, NoType -> false
+    | x::xs, TypeDescriptorList(t, ts) -> ((checkType x t) && (checkTypeFunc xs ts))
 
 let rec getTypeDescriptor (evType: evaluationType) = match evType with
     | Int(_) -> Integer
     | Bool(_) -> Boolean
     | Str(_) -> String
     | SetT(x, _) -> Set(x)
-    | ClosureT(_,_,_,_,_) -> raise RuntimeException
+    | ClosureT(_, paramTDs, retTD, _, _) -> Closure(paramTDs, retTD)
 
 
 (*Print functions*)
@@ -167,7 +170,7 @@ let rec printEvaluationType (evType: evaluationType) = match evType with
         print_string ") <";
         print_string "expr";
         print_string ">"
-    (*| Unbound -> print_string "Unbound"*)
+    (*TODO: remove | Unbound -> print_string "Unbound"*)
 
 (*Utility functions*)
 let rec evtEquals (elem1: evaluationType) (elem2: evaluationType) = match (elem1, elem2) with
@@ -175,7 +178,7 @@ let rec evtEquals (elem1: evaluationType) (elem2: evaluationType) = match (elem1
     | Bool(a), Bool(b) -> a=b
     | Str(a), Str(b) -> a=b
     | SetT(td1, els1), SetT(td2, els2) -> (td1 = td2) && (evtEqualsSet els1 els2)
-    | _ -> raise TypeException
+    | _ -> raise DynamicTypeException
 
 and contains (lst: evaluationType list) (elem: evaluationType) = match lst with
     | [] -> false
@@ -211,7 +214,7 @@ let rec evtGreaterThan (elem1: evaluationType) (elem2: evaluationType) = match (
             else if tdp2>tdp1
                 then false
                 else (listCount els1) > (listCount els2))
-    | _ -> raise TypeException
+    | _ -> raise DynamicTypeException
 
 let rec setIsSubset (lls: evaluationType list) (rls: evaluationType list) = match lls with
     | [] -> true
@@ -231,24 +234,24 @@ let rec setMin (elems: evaluationType list) = match elems with
 (*let binaryOperator (a: identifier) (b: identifier) (aT: typeDescriptor) (bT: typeDescriptor) (f: )*)
 let intTimes x y = match (checkType x Integer, checkType y Integer, x, y) with
     | (true, true, Int(l), Int(r)) -> Int(l*r)
-    | _ -> raise RuntimeException
+    | _ -> raise DynamicTypeException
 
 let intPlus x y = match (checkType x Integer, checkType y Integer, x, y) with
     | (true, true, Int(l), Int(r)) -> Int(l+r)
-    | _ -> raise RuntimeException
+    | _ -> raise DynamicTypeException
 
 
 let boolOr x y = match (checkType x Boolean, checkType y Boolean, x, y) with
     | (true, true, Bool(l), Bool(r)) -> Bool(l || r)
-    | _ -> raise RuntimeException
+    | _ -> raise DynamicTypeException
 
 let boolAnd x y = match (checkType x Boolean, checkType y Boolean, x, y) with
     | (true, true, Bool(l), Bool(r)) -> Bool(l && r)
-    | _ -> raise RuntimeException
+    | _ -> raise DynamicTypeException
 
 let boolNot x = match (checkType x Boolean, x) with
     | (true, Bool(l)) -> Bool(not l)
-    | _ -> raise RuntimeException
+    | _ -> raise DynamicTypeException
 
 
 let setPut set element = match set with
@@ -259,16 +262,16 @@ let setPut set element = match set with
             else
                 SetT(td, element::elems)
         else
-            raise TypeException)
-    | _ -> raise TypeException
+            raise DynamicTypeException)
+    | _ -> raise DynamicTypeException
 
 let setRemove set element = match set with
     | SetT(td, elems) -> (
         if (checkType element td) then
             SetT(td, listWithout elems element)
         else
-            raise TypeException)
-    | _ -> raise TypeException
+            raise DynamicTypeException)
+    | _ -> raise DynamicTypeException
 
 (*Evaluation*)
 let rec eval (e: expression) (env: evaluationType environment) = match e with
@@ -289,13 +292,18 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
             (match (checkType g Boolean, g) with
                 | (true, Bool(gev)) when gev -> eval b1 env
                 | (true, Bool(gev)) when not gev -> eval b2 env
-                | (_, _) -> raise TypeException
+                | (_, _) -> raise DynamicTypeException
             )
         )
     | Func(identifiers, parameterTypes, outputType, body) -> ClosureT(identifiers, parameterTypes, outputType, body, env)
     | Apply(func, parameters) -> (let f = (eval func env) in match f with
-            | ClosureT(identifiers, _, _, body, fenv) ->
-                    eval body (bindList identifiers (evalList parameters env) (bind "rec" f fenv))
+            | ClosureT(identifiers, paramTDs, retTD, body, fenv) -> (let paramEVTs = (evalList parameters env) in
+                    if (checkTypeFunc paramEVTs paramTDs)
+                        then let returnValue = (eval body (bindList identifiers paramEVTs (bind "rec" f fenv))) in
+                            if (checkType returnValue retTD)
+                                then returnValue
+                                else raise DynamicTypeException
+                        else raise DynamicTypeException)
             | _ -> raise ApplyingNonFunctional
         )
     | EmptySet(typeDesc) -> SetT(typeDesc, [])
@@ -303,52 +311,52 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
         if (checkType value typeDesc) then
             SetT(typeDesc, [value])
         else
-            raise TypeException)
+            raise DynamicTypeException)
     | SetOf(typeDesc, exprs) -> (let vals = evalList exprs env in
-        if (checkTypeMultiple typeDesc vals) then
+        if (checkTypeMultiple vals typeDesc) then
             SetT(typeDesc, vals)
         else
-            raise TypeException)
+            raise DynamicTypeException)
     | SetPut(exp1, exp2) -> setPut (eval exp1 env) (eval exp2 env)
     | Print(exp) -> (let value = (eval exp env) in printEvaluationType value ; print_string "\n" ; value)
     | SetRemove(exp1, exp2) -> setRemove (eval exp1 env) (eval exp2 env)
     | SetIsEmpty(exp) -> (match (eval exp env) with
         | SetT(_, []) -> Bool(true)
         | SetT(_,_) -> Bool(false)
-        | _ -> raise TypeException)
+        | _ -> raise DynamicTypeException)
     | SetContains(exp1, exp2) -> (match (eval exp1 env) with
         | SetT(tDesc, elems) -> (let value = (eval exp2 env) in
             if (checkType value tDesc)
                 then Bool(contains elems value)
-                else raise TypeException)
-        | _ -> raise TypeException)
+                else raise DynamicTypeException)
+        | _ -> raise DynamicTypeException)
     | SetIsSubset(exp1, exp2) -> (match (eval exp1 env, eval exp2 env) with
         | (SetT(td1, els1), SetT(td2, els2)) -> (
             if (td1 = td2)
                 then Bool(setIsSubset els1 els2)
-                else raise TypeException
+                else raise DynamicTypeException
             )
-        | _ -> raise TypeException)
+        | _ -> raise DynamicTypeException)
     | SetMin(exp) -> (match (eval exp env) with
         | SetT(_, elems) -> setMin elems
-        | _ -> raise TypeException)
+        | _ -> raise DynamicTypeException)
     | SetMax(exp) -> (match (eval exp env) with
         | SetT(_, elems) -> setMax elems
-        | _ -> raise TypeException)
+        | _ -> raise DynamicTypeException)
     | GreaterThan(exp1, exp2) -> Bool(evtGreaterThan (eval exp1 env) (eval exp2 env))
     | LessThan(exp1, exp2) -> Bool(evtGreaterThan (eval exp2 env) (eval exp1 env))
     | Forall(exp1, exp2) -> (match (eval exp1 env) with
         | SetT(td, elements)-> Bool(forall elements (eval exp2 env))
-        | _ -> raise TypeException)
+        | _ -> raise DynamicTypeException)
     | Exists(exp1, exp2) -> (match (eval exp1 env) with
         | SetT(td, elements) -> Bool(exists elements (eval exp2 env))
-        | _ -> raise TypeException)
+        | _ -> raise DynamicTypeException)
     | Filter(exp1, exp2) -> (match (eval exp1 env) with
         | SetT(td, elements) -> SetT(td, filter elements (eval exp2 env))
-        | _ -> raise TypeException)
+        | _ -> raise DynamicTypeException)
     | Map(exp1, exp2) -> (match (eval exp1 env) with
         | SetT(td, elements) -> SetT(td, map elements (eval exp2 env))
-        | _ -> raise TypeException)
+        | _ -> raise DynamicTypeException)
     (*TODO: remove | _ -> failwith ("not implemented yet")*)
 
 and evalList (expressions: expressionList) (env: evaluationType environment) =
@@ -362,12 +370,12 @@ and forall (elements: evaluationType list) (func: evaluationType) = match elemen
         match func with
             | ClosureT(params, _, _, body, fenv) -> (match (eval body (bind (
                     match params with
-                        | NoIdentifier -> raise TypeException
+                        | NoIdentifier -> raise DynamicTypeException
                         | IdentifierList(x, _) -> x
                     ) x fenv)) with
                 | Bool(b) -> b
-                | _ -> raise WrongReturnTypeError)
-            | _ -> raise TypeException) && (forall xs func))
+                | _ -> raise WrongReturnTypeException)
+            | _ -> raise DynamicTypeException) && (forall xs func))
 
 and exists (elements: evaluationType list) (func: evaluationType) = match elements with
     | [] -> false
@@ -375,12 +383,12 @@ and exists (elements: evaluationType list) (func: evaluationType) = match elemen
         match func with
             | ClosureT(params, _, _, body, fenv) -> (match (eval body (bind (
                     match params with
-                        | NoIdentifier -> raise TypeException
+                        | NoIdentifier -> raise DynamicTypeException
                         | IdentifierList(x, _) -> x
                     ) x fenv)) with
                 | Bool(b) -> b
-                | _ -> raise WrongReturnTypeError)
-            |_ -> raise TypeException) || (exists xs func))
+                | _ -> raise WrongReturnTypeException)
+            |_ -> raise DynamicTypeException) || (exists xs func))
 
 and filter (elements: evaluationType list) (func: evaluationType) = match elements with
     | [] -> []
@@ -388,12 +396,12 @@ and filter (elements: evaluationType list) (func: evaluationType) = match elemen
         match func with
             | ClosureT(params, _, _, body, fenv) -> (match (eval body (bind (
                     match params with
-                        | NoIdentifier -> raise TypeException
+                        | NoIdentifier -> raise DynamicTypeException
                         | IdentifierList(x, _) -> x
                     ) x fenv)) with
                 | Bool (b) -> b
-                | _ -> raise WrongReturnTypeError)
-            | _ -> raise TypeException
+                | _ -> raise WrongReturnTypeException)
+            | _ -> raise DynamicTypeException
         ))
         then x::(filter xs func)
         else (filter xs func)
@@ -405,13 +413,13 @@ and map (elements: evaluationType list) (func: evaluationType) = match elements 
             let els = map xs func in
             let newelem = (eval body (bind (
                     match params with
-                        | NoIdentifier -> raise TypeException
+                        | NoIdentifier -> raise DynamicTypeException
                         | IdentifierList(x, _) -> x
                     ) x fenv)) in
             if (contains els newelem)
                 then els
                 else newelem::els)
-        | _ -> raise TypeException)
+        | _ -> raise DynamicTypeException)
 
 
 
@@ -428,30 +436,30 @@ let rec staticTypeCheck (expression: expression) (env: typeDescriptor environmen
         | BoolImm(_) -> Boolean
         | Times(op1, op2) -> (match (staticTypeCheck op1 env, staticTypeCheck op2 env) with
             | Integer, Integer -> Integer
-            | _,_ -> raise TypeException)
+            | _,_ -> raise StaticTypeException)
         | Plus(op1, op2) -> (match (staticTypeCheck	op1 env, staticTypeCheck op2 env) with
             | Integer, Integer -> Integer
-            | _,_ -> raise TypeException)
+            | _,_ -> raise StaticTypeException)
         | Eq(_,_) -> Boolean
         | IsZero(op) -> (match (staticTypeCheck	op env) with
             | Integer -> Boolean
-            | _ -> raise TypeException)
+            | _ -> raise StaticTypeException)
         | Or(op1, op2) -> (match (staticTypeCheck op1 env, staticTypeCheck op2 env) with
             | Boolean, Boolean -> Boolean
-            | _,_ -> raise TypeException)
+            | _,_ -> raise StaticTypeException)
         | And(op1, op2) -> (match (staticTypeCheck op1 env, staticTypeCheck op2 env) with
             | Boolean, Boolean -> Boolean
-            | _,_ -> raise TypeException)
+            | _,_ -> raise StaticTypeException)
         | Not(op) -> (match (staticTypeCheck op env) with
             | Boolean -> Boolean
-            | _ -> raise TypeException)
+            | _ -> raise StaticTypeException)
         | Den(id) -> env id
         | If(guard, branch1, branch2) -> (match staticTypeCheck guard env with
             | Boolean -> (let type1 = staticTypeCheck branch1 env in let type2 = staticTypeCheck branch2 env in
                 if type1=type2
                     then type1
-                    else raise TypeException)
-            | _ -> raise TypeException)
+                    else raise StaticTypeException)
+            | _ -> raise StaticTypeException)
         | Let(id, assignment, block) -> staticTypeCheck block (bind id (staticTypeCheck assignment env) env)
         | Func(idList, paramTDs, returnTD, block) -> Closure(paramTDs, returnTD)
         | Apply(funcExpr, paramsExprs) -> (match (staticTypeCheck funcExpr env) with
@@ -462,118 +470,62 @@ let rec staticTypeCheck (expression: expression) (env: typeDescriptor environmen
                 | TypeDescriptorList(td, tdl), ExpressionList(exp, expl) -> (let expT = staticTypeCheck exp env in if td = expT then (checkParams tdl expl) else false)
                 in if (checkParams paramTDs paramsExprs)
                     then returnTD
-                    else raise TypeException)
-            | _ -> raise TypeException)
+                    else raise StaticTypeException)
+            | _ -> raise StaticTypeException)
         | EmptySet(typeDesc) -> Set(typeDesc)
         | SingletonSet(typeDesc, _) -> Set(typeDesc)
         | SetOf(typeDesc, _) -> Set(typeDesc)
         | SetPut(setExpr, valExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck valExpr env) with
             | Set(setTypeDesc), valTypeDesc -> Set(setTypeDesc)
-            | _, _ -> raise TypeException)
+            | _, _ -> raise StaticTypeException)
         | SetRemove(setExpr, valExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck valExpr env) with
             | Set(setTypeDesc), valTypeDesc when setTypeDesc = valTypeDesc -> Set(setTypeDesc)
-            | _, _ -> raise TypeException)
+            | _, _ -> raise StaticTypeException)
         | SetIsEmpty(setExpr) -> (match staticTypeCheck setExpr env with
             | Set(typeDesc) -> Boolean
-            | _ -> raise TypeException)
+            | _ -> raise StaticTypeException)
         | SetContains(setExpr, valExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck valExpr env) with
             | Set(setTypeDesc), valTypeDesc when setTypeDesc = valTypeDesc -> Boolean
-            | _, _ -> raise TypeException)
+            | _, _ -> raise StaticTypeException)
         | SetIsSubset(setExpr, subsetExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck subsetExpr env) with
             | Set(setTypeDesc), Set(subsetTypeDesc) when setTypeDesc = subsetTypeDesc -> Boolean
-            | _, _ -> raise TypeException)
+            | _, _ -> raise StaticTypeException)
         | SetMin(setExpr) -> (match staticTypeCheck setExpr env with
             | Set(typeDesc) -> typeDesc
-            | _ -> raise TypeException)
+            | _ -> raise StaticTypeException)
         | SetMax(setExpr) -> (match staticTypeCheck setExpr env with
             | Set(typeDesc) -> typeDesc
-            | _ -> raise TypeException)
+            | _ -> raise StaticTypeException)
         | Print(expr) -> staticTypeCheck expr env
         | GreaterThan(expr1, expr2) -> (match (staticTypeCheck expr1 env, staticTypeCheck expr2 env) with
             | Integer, Integer -> Boolean
             | Boolean, Boolean -> Boolean
             | String, String -> Boolean
             | Set(_), Set(_) -> Boolean
-            | _, _ -> raise TypeException)
+            | _, _ -> raise StaticTypeException)
         | LessThan(expr1, expr2) -> (match (staticTypeCheck expr1 env, staticTypeCheck expr2 env) with
             | Integer, Integer -> Boolean
             | Boolean, Boolean -> Boolean
             | String, String -> Boolean
             | Set(_), Set(_) -> Boolean
-            | _, _ -> raise TypeException)
+            | _, _ -> raise StaticTypeException)
         | Forall(setExpr, funcExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck funcExpr env) with
             | Set(typeDesc), Closure(tdList, retTD) -> (match tdList with
                 | TypeDescriptorList(td, NoType) when (td = typeDesc) && (retTD = Boolean) -> Boolean
-                | _ -> raise TypeException)
-            | _ -> raise TypeException)
+                | _ -> raise StaticTypeException)
+            | _ -> raise StaticTypeException)
         | Exists(setExpr, funcExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck funcExpr env) with
             | Set(typeDesc), Closure(tdList, retTD) -> (match tdList with
                 | TypeDescriptorList(td, NoType) when (td = typeDesc) && (retTD = Boolean) -> Boolean
-                | _ -> raise TypeException)
-            | _, _ -> raise TypeException)
+                | _ -> raise StaticTypeException)
+            | _, _ -> raise StaticTypeException)
         | Filter(setExpr, funcExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck funcExpr env) with
             | Set(typeDesc), Closure(tdList, retTD) -> (match tdList with
                 | TypeDescriptorList(td, NoType) when (td = typeDesc) && (retTD = Boolean) -> Set(typeDesc)
-                | _ -> raise TypeException)
-            | _, _ -> raise TypeException)
+                | _ -> raise StaticTypeException)
+            | _, _ -> raise StaticTypeException)
         | Map(setExpr, funcExpr) -> (match (staticTypeCheck setExpr env, staticTypeCheck funcExpr env) with
             | Set(typeDesc), Closure(tdList, retTD) -> (match tdList with
                 | TypeDescriptorList(td, NoType) when (td = typeDesc) -> Set(retTD)
-                | _ -> raise TypeException)
-            | _, _ -> raise TypeException)
-
-
-(*
-let rec inferUnboundValues (expr: expression) (env: typeDescriptor environment) =
-    match expr with
-        | IntImm(_) -> emptyTypeEnvironment
-        | StringImm(_) -> emptyTypeEnvironment
-        | BoolImm(_) -> emptyTypeEnvironment
-        | Times(op1, op2) -> (match (op1, op2) with
-            | Den(d1), Den(d2) -> (match (env d1, env d2) with
-                | Unknown, Unknown -> bind d1 Integer (bind d2 Integer env)
-                | Unknown, _ -> bind d1 Integer env
-                | _, Unknown -> bind d2 Integer env
-                | _, _ -> emptyTypeEnvironment)
-            | Den(d), _ -> (match env d with
-                | Unknown -> bind d Integer (inferUnboundValues op2 env))
-            | _, Den(d) -> (match env d with
-                | Unknown -> bind d Integer (inferUnboundValues op1 env)))
-        | Plus(op1, op2) -> (match (op1, op2) with
-            | Den(d1), Den(d2) -> (match (env d1, env d2) with
-                | Unknown, Unknown -> bind d1 Integer (bind d2 Integer env)
-                | Unknown, _ -> bind d1 Integer env
-                | _, Unknown -> bind d2 Integer env
-                | _, _ -> emptyTypeEnvironment)
-            | Den(d), _ -> (match env d with
-                | Unknown -> bind d Integer (inferUnboundValues op2 env))
-            | _, Den(d) -> (match env d with
-                | Unknown -> bind d Integer (inferUnboundValues op1 env)))
-        (*| Eq of expression * expression
-        | IsZero of expression
-        | Or of expression * expression
-        | And of expression * expression
-        | Not of expression
-        | Den of identifier
-        | If of expression * expression * expression
-        | Let of identifier * expression * expression
-        | Func of identifierList * expression
-        | Apply of expression * expressionList
-        | EmptySet of typeDescriptor
-        | SingletonSet of typeDescriptor * expression
-        | SetOf of typeDescriptor * expressionList
-        | SetPut of expression * expression
-        | SetRemove of expression * expression
-        | SetIsEmpty of expression
-        | SetContains of expression * expression
-        | SetIsSubset of expression * expression
-        | SetMin of expression
-        | SetMax of expression
-        | Print of expression
-        | GreaterThan of expression * expression
-        | LessThan of expression * expression
-        | Forall of expression * expression
-        | Exists of expression * expression
-        | Filter of expression * expression
-        | Map of expression * expression*)
-*)
+                | _ -> raise StaticTypeException)
+            | _, _ -> raise StaticTypeException)

@@ -67,7 +67,7 @@ print_string "\n";;
 *)
 
 
-(*Fibonacci
+(*Fibonacci*)
 exception AssertException
 
 let print_debug (evt: evaluationType) =
@@ -95,7 +95,7 @@ assertEqualsDebug sum (Int 30)
 
 let fibonacci =
     Let("fibonacci",
-        Func(IdentifierList("n", NoIdentifier),
+        Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer,
             If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
                 IntImm(1),
                 Plus(
@@ -116,7 +116,7 @@ let fibonacci =
 assertEqualsDebug fibonacci (Int 89)
 
 let fibF =
-    Func(IdentifierList("n", NoIdentifier),
+    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer,
         If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
             IntImm(1),
             Plus(
@@ -151,9 +151,12 @@ let fibSet =
 ;;
 
 print_debug (eval fibSet emptyEvaluationEnvironment)
-EndFibonacci*)
+(*EndFibonacci*)
 
-printTypeDescriptor (staticTypeCheck (IntImm(10)) emptyTypeEnvironment) ; print_string "\n";;
+(*printTypeDescriptor (staticTypeCheck (IntImm(10)) emptyTypeEnvironment) ; print_string "\n";;
 printTypeDescriptor (staticTypeCheck (Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a"))) emptyTypeEnvironment) ; print_string "\n";;
-printTypeDescriptor (staticTypeCheck (Let("f", Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a")), Apply(Den("f"), ExpressionList(IntImm 10, NoExpression)))) emptyTypeEnvironment) ; print_string "\n";;
+printEvaluationType (eval (Let("f", Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a")), Apply(Den("f"), ExpressionList(IntImm 10, NoExpression)))) emptyEvaluationEnvironment) ; print_string "\n";;
 printTypeDescriptor (Closure(TypeDescriptorList(Integer, TypeDescriptorList(Integer, NoType)), Integer)) ; print_string "\n";;
+
+printEvaluationType (eval (Let("f", Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a")), Apply(Den("f"), ExpressionList(IntImm 10, NoExpression)))) emptyEvaluationEnvironment) ; print_string "\n";;
+printEvaluationType (eval (Let("f", Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a")), Apply(Den("f"), ExpressionList(IntImm 10, NoExpression)))) emptyEvaluationEnvironment) ; print_string "\n";;*)
