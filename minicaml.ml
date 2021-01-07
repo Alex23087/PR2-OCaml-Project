@@ -220,6 +220,7 @@ let rec evtGreaterThan (elem1: evaluationType) (elem2: evaluationType) = match (
                 then false
                 else (listCount els1) > (listCount els2))
     | _ -> raise DynamicTypeException
+    (*TODO: add closure comparison*)
 
 let rec setIsSubset (lls: evaluationType list) (rls: evaluationType list) = match lls with
     | [] -> true
