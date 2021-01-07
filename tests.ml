@@ -181,25 +181,7 @@ printEvaluationType (eval (Let("f", Func(IdentifierList("a", NoIdentifier), Type
 (*Expressions Tests*)
 
 
-(*TODO: finish expressions tests
 
-    | SingletonSet of typeDescriptor * expression
-    | SetOf of typeDescriptor * expressionList
-    | SetPut of expression * expression
-    | SetRemove of expression * expression
-    | SetIsEmpty of expression
-    | SetContains of expression * expression
-    | SetIsSubset of expression * expression
-    | SetMin of expression
-    | SetMax of expression
-    | Print of expression
-    | GreaterThan of expression * expression
-    | LessThan of expression * expression
-    | Forall of expression * expression
-    | Exists of expression * expression
-    | Filter of expression * expression
-    | Map of expression * expression
-*)
 
 (*Immediates*)
 assertEquals (IntImm 10) (Int 10) false;;
@@ -298,3 +280,34 @@ assertDynamicTypeException (SingletonSet(Integer, BoolImm true)) false;;
 assertEquals (SetOf(Integer, ExpressionList(IntImm 10, ExpressionList(IntImm 20, NoExpression)))) (SetT(Integer, [Int 20; Int 10])) false;;
 assertEquals (SetOf(Integer, NoExpression)) (SetT(Integer, [])) false;;
 assertDynamicTypeException (SetOf(Integer, ExpressionList(IntImm 10, ExpressionList(BoolImm false, NoExpression)))) false;;
+
+
+(*TODO: finish expressions tests
+
+    | SetIsEmpty of expression
+    | SetContains of expression * expression
+    | SetIsSubset of expression * expression
+    | SetMin of expression
+    | SetMax of expression
+    | Print of expression
+    | GreaterThan of expression * expression
+    | LessThan of expression * expression
+    | Forall of expression * expression
+    | Exists of expression * expression
+    | Filter of expression * expression
+    | Map of expression * expression
+*)
+
+(*SetPut*)
+assertEquals (SetPut(EmptySet(Integer), IntImm 10)) (SetT(Integer, [Int 10])) false;;
+assertEquals (SetPut(SingletonSet(Integer, IntImm 10), IntImm 10)) (SetT(Integer, [Int 10])) false;;
+assertDynamicTypeException (SetPut(EmptySet(Integer), BoolImm false)) false;;
+
+(*SetRemove*)
+assertEquals (SetRemove(SetOf(Integer, ExpressionList(IntImm 10, ExpressionList(IntImm 20, NoExpression))), IntImm 20)) (SetT(Integer, [Int 10])) false;;
+assertEquals (SetRemove(SingletonSet(Integer, IntImm 10), IntImm 20)) (SetT(Integer, [Int 10])) false;;
+assertDynamicTypeException (SetRemove(SingletonSet(Integer, IntImm 10), BoolImm false)) false;;
+
+(*SetIsEmpty*)
+assertEquals (SetIsEmpty(EmptySet(Integer))) (Bool true) false;;
+assertEquals (SetIsEmpty(SingletonSet(Integer, IntImm 10))) (Bool false) false;;
