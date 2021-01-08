@@ -33,6 +33,7 @@ type expression =
     | StringImm of string
     | BoolImm of bool
     | Times of expression * expression
+    | Divide of expression * expression
     | Plus of expression * expression
     | Eq of expression * expression
     | IsZero of expression
@@ -237,9 +238,12 @@ let rec setMin (elems: evaluationType list) = match elems with
     | x::xs -> (let y = setMin xs in if (evtGreaterThan y x) then x else y)
 
 (*Builtins*)
-(*let binaryOperator (a: identifier) (b: identifier) (aT: typeDescriptor) (bT: typeDescriptor) (f: )*)
 let intTimes x y = match (checkType x Integer, checkType y Integer, x, y) with
     | (true, true, Int(l), Int(r)) -> Int(l*r)
+    | _ -> raise DynamicTypeException
+
+let intDivide x y = match (checkType x Integer, checkType y Integer, x, y) with
+    | (true, true, Int(l), Int(r)) -> Int(l/r)
     | _ -> raise DynamicTypeException
 
 let intPlus x y = match (checkType x Integer, checkType y Integer, x, y) with
@@ -288,6 +292,7 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
     | Let(id, exp1, exp2) ->
         eval exp2 (bind id (eval exp1 env) env)
     | Times(exp1, exp2) -> intTimes (eval exp1 env) (eval exp2 env)
+    | Divide(exp1, exp2) -> intDivide (eval exp1 env) (eval exp2 env)
     | Plus(exp1, exp2) -> intPlus (eval exp1 env) (eval exp2 env)
     | Eq(exp1, exp2) -> Bool(evtEquals (eval exp1 env) (eval exp2 env))
     | IsZero(exp) -> Bool(evtEquals (eval exp env) (Int 0))
@@ -347,10 +352,14 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
             )
         | _ -> raise DynamicTypeException)
     | SetMin(exp) -> (match (eval exp env) with
-        | SetT(_, elems) -> setMin elems
+        | SetT(typeDesc, elems) -> (match typeDesc with
+            | Closure(_, _) -> raise DynamicTypeException
+            | _ -> setMin elems)
         | _ -> raise DynamicTypeException)
     | SetMax(exp) -> (match (eval exp env) with
-        | SetT(_, elems) -> setMax elems
+        | SetT(typeDesc, elems) -> (match typeDesc with
+            | Closure(_, _) -> raise DynamicTypeException
+            | _ -> setMax elems)
         | _ -> raise DynamicTypeException)
     | GreaterThan(exp1, exp2) -> Bool(evtGreaterThan (eval exp1 env) (eval exp2 env))
     | LessThan(exp1, exp2) -> Bool(evtGreaterThan (eval exp2 env) (eval exp1 env))
@@ -363,8 +372,8 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
     | Filter(exp1, exp2) -> (match (eval exp1 env) with
         | SetT(td, elements) -> SetT(td, filter elements (eval exp2 env))
         | _ -> raise DynamicTypeException)
-    | Map(exp1, exp2) -> (match (eval exp1 env) with
-        | SetT(td, elements) -> SetT(td, map elements (eval exp2 env))
+    | Map(exp1, exp2) -> (let f = (eval exp2 env) in match (eval exp1 env, f) with
+        | SetT(td, elements), ClosureT(_, _, retTD, _, _) -> SetT(retTD, map elements f)
         | _ -> raise DynamicTypeException)
     (*TODO: remove | _ -> failwith ("not implemented yet")*)
 
@@ -379,8 +388,8 @@ and forall (elements: evaluationType list) (func: evaluationType) = match elemen
         match func with
             | ClosureT(params, _, _, body, fenv) -> (match (eval body (bind (
                     match params with
-                        | NoIdentifier -> raise DynamicTypeException
-                        | IdentifierList(x, _) -> x
+                        | IdentifierList(id, NoIdentifier) -> id
+                        | _ -> raise DynamicTypeException
                     ) x fenv)) with
                 | Bool(b) -> b
                 | _ -> raise WrongReturnTypeException)
@@ -392,8 +401,8 @@ and exists (elements: evaluationType list) (func: evaluationType) = match elemen
         match func with
             | ClosureT(params, _, _, body, fenv) -> (match (eval body (bind (
                     match params with
-                        | NoIdentifier -> raise DynamicTypeException
-                        | IdentifierList(x, _) -> x
+                        | IdentifierList(id, NoIdentifier) -> id
+                        | _ -> raise DynamicTypeException
                     ) x fenv)) with
                 | Bool(b) -> b
                 | _ -> raise WrongReturnTypeException)
@@ -403,13 +412,16 @@ and filter (elements: evaluationType list) (func: evaluationType) = match elemen
     | [] -> []
     | x::xs -> if ((
         match func with
-            | ClosureT(params, _, _, body, fenv) -> (match (eval body (bind (
-                    match params with
-                        | NoIdentifier -> raise DynamicTypeException
-                        | IdentifierList(x, _) -> x
-                    ) x fenv)) with
-                | Bool (b) -> b
-                | _ -> raise WrongReturnTypeException)
+            | ClosureT(params, paramTDs, retTD, body, fenv) -> if retTD = Boolean then (match paramTDs with
+                | TypeDescriptorList(td, NoType) when checkType x td -> (match (eval body (bind (
+                        match params with
+                            | IdentifierList(id, NoIdentifier) -> id
+                            | _ -> raise DynamicTypeException
+                        ) x fenv)) with
+                    | Bool (b) -> b
+                    | _ -> raise WrongReturnTypeException)
+                | _ -> raise DynamicTypeException)
+                else raise WrongReturnTypeException
             | _ -> raise DynamicTypeException
         ))
         then x::(filter xs func)
@@ -418,16 +430,22 @@ and filter (elements: evaluationType list) (func: evaluationType) = match elemen
 and map (elements: evaluationType list) (func: evaluationType) = match elements with
     | [] -> []
     | x::xs -> (match func with
-        | ClosureT(params, _, _, body, fenv) -> (
-            let els = map xs func in
-            let newelem = (eval body (bind (
-                    match params with
-                        | NoIdentifier -> raise DynamicTypeException
-                        | IdentifierList(x, _) -> x
-                    ) x fenv)) in
-            if (contains els newelem)
-                then els
-                else newelem::els)
+        | ClosureT(params, paramTDs, retTD, body, fenv) -> (match paramTDs with
+            | TypeDescriptorList(td, NoType) -> if (checkType x td)
+                then (
+                    let els = map xs func in
+                    let newelem = (eval body (bind (
+                            match params with
+                                | IdentifierList(id, NoIdentifier) -> id
+                                | _ -> raise DynamicTypeException
+                            ) x fenv)) in
+                    if (checkType newelem retTD)
+                        then if (contains els newelem)
+                            then els
+                            else newelem::els
+                        else raise WrongReturnTypeException)
+                else raise DynamicTypeException
+            | _ -> raise DynamicTypeException)
         | _ -> raise DynamicTypeException)
 
 
@@ -444,6 +462,9 @@ let rec staticTypeCheck (expression: expression) (env: typeDescriptor environmen
         | StringImm(_) -> String
         | BoolImm(_) -> Boolean
         | Times(op1, op2) -> (match (staticTypeCheck op1 env, staticTypeCheck op2 env) with
+            | Integer, Integer -> Integer
+            | _,_ -> raise StaticTypeException)
+        | Divide(op1, op2) -> (match (staticTypeCheck op1 env, staticTypeCheck op2 env) with
             | Integer, Integer -> Integer
             | _,_ -> raise StaticTypeException)
         | Plus(op1, op2) -> (match (staticTypeCheck	op1 env, staticTypeCheck op2 env) with

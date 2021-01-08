@@ -1,72 +1,5 @@
 #use "minicaml.ml";;
 
-(*Tests*)
-(*
-let x = Let("x", IntImm(10), Times(Den("x"), IntImm 7))
-let v = printEvaluationType (eval x emptyEvaluationEnvironment)
-let v = print_string "\n"
-let x = IsZero(IntImm(0))
-let v = printEvaluationType (eval x emptyEvaluationEnvironment)
-let v = print_string "\n"
-let x = Or(BoolImm(false), BoolImm(false))
-let v = printEvaluationType (eval x emptyEvaluationEnvironment)
-let v = print_string "\n"
-let x = If(Or(BoolImm(false), BoolImm(false)), IntImm(10), IntImm(20))
-let v = printEvaluationType (eval x emptyEvaluationEnvironment)
-let v = print_string "\n"
-let x = Let("f", Func(["a"; "b"], Times(Den("a"), Den("b"))), Apply(Den("f"), [IntImm(10); IntImm(4)]))
-let x = Let("f", Func(["a"; "b"], Times(Den("a"), Den("b"))), Den("f"))
-let v = printEvaluationType (eval x emptyEvaluationEnvironment)
-let v = print_string "\n"
-
-let x = SetT(Set(Integer), [SetT(Integer, [Int 1])])
-let v = printEvaluationType x
-let v = print_string "\n"
-
-let td = printTypeDescriptor (getTypeDescriptor ( Int 10 ))
-
-let x = eval (EmptySet(Integer)) emptyEvaluationEnvironment;;
-printEvaluationType x;
-print_string "\n";
-printTypeDescriptor (getTypeDescriptor x);
-print_string "\n";;
-
-
-let x = eval (SingletonSet(Integer, IntImm 7 )) emptyEvaluationEnvironment;;
-printEvaluationType x;
-print_string "\n";
-printTypeDescriptor (getTypeDescriptor x);
-print_string "\n";;
-
-let x = eval (SetOf(Integer, [IntImm 10; IntImm 20; Times(IntImm 5, IntImm 6)])) emptyEvaluationEnvironment;;
-printEvaluationType x;
-print_string "\n";
-printTypeDescriptor (getTypeDescriptor x);
-print_string "\n";;
-
-let x = eval (SetPut(SetOf(Integer, [IntImm 10; IntImm 20; Times(IntImm 5, IntImm 6)]), IntImm(10))) emptyEvaluationEnvironment;;
-printEvaluationType x;
-print_string "\n";
-printTypeDescriptor (getTypeDescriptor x);
-print_string "\n";;
-
-let recursive = (
-    Let("r", Func(["n"],
-        If(IsZero(Den("n")),
-            Den("n"),
-            Apply(Den("rec"), [Plus(Print(Den("n")), IntImm(-1))])
-        )
-    ),
-    Apply(Den("r"), [IntImm 10])))
-
-let x = eval recursive emptyEvaluationEnvironment;;
-printEvaluationType x;
-print_string "\n";
-printTypeDescriptor (getTypeDescriptor x);
-print_string "\n";;
-*)
-
-
 (*Fibonacci*)
 exception AssertException
 
@@ -108,6 +41,15 @@ let assertEmptySetException (expr: expression) (debugPrint: bool) =
         else
             print_string ""); raise AssertException
     with EmptySetException -> print_string "Passed\n"
+;;
+
+let assertWrongReturnTypeException (expr: expression) (debugPrint: bool) =
+    try let res = eval expr emptyEvaluationEnvironment in
+        (if debugPrint then
+            print_debug res
+        else
+            print_string ""); raise AssertException
+    with WrongReturnTypeException -> print_string "Passed\n"
 ;;
 
 (*Fibonacci
@@ -174,21 +116,8 @@ let fibSet =
 (*print_debug (eval fibSet emptyEvaluationEnvironment)*)
 EndFibonacci*)
 
-(*printTypeDescriptor (staticTypeCheck (IntImm(10)) emptyTypeEnvironment) ; print_string "\n";;
-printTypeDescriptor (staticTypeCheck (Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a"))) emptyTypeEnvironment) ; print_string "\n";;
-printEvaluationType (eval (Let("f", Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a")), Apply(Den("f"), ExpressionList(IntImm 10, NoExpression)))) emptyEvaluationEnvironment) ; print_string "\n";;
-printTypeDescriptor (Closure(TypeDescriptorList(Integer, TypeDescriptorList(Integer, NoType)), Integer)) ; print_string "\n";;
-
-printEvaluationType (eval (Let("f", Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a")), Apply(Den("f"), ExpressionList(IntImm 10, NoExpression)))) emptyEvaluationEnvironment) ; print_string "\n";;
-printEvaluationType (eval (Let("f", Func(IdentifierList("a", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den("a")), Apply(Den("f"), ExpressionList(IntImm 10, NoExpression)))) emptyEvaluationEnvironment) ; print_string "\n";;*)
-
-
-
-
 
 (*Expressions Tests*)
-
-
 
 
 (*Immediates*)
@@ -289,18 +218,6 @@ assertEquals (SetOf(Integer, ExpressionList(IntImm 10, ExpressionList(IntImm 20,
 assertEquals (SetOf(Integer, NoExpression)) (SetT(Integer, [])) false;;
 assertDynamicTypeException (SetOf(Integer, ExpressionList(IntImm 10, ExpressionList(BoolImm false, NoExpression)))) false;;
 
-
-(*TODO: finish expressions tests
-
-    | Print of expression
-    | GreaterThan of expression * expression
-    | LessThan of expression * expression
-    | Forall of expression * expression
-    | Exists of expression * expression
-    | Filter of expression * expression
-    | Map of expression * expression
-*)
-
 (*SetPut*)
 assertEquals (SetPut(EmptySet(Integer), IntImm 10)) (SetT(Integer, [Int 10])) false;;
 assertEquals (SetPut(SingletonSet(Integer, IntImm 10), IntImm 10)) (SetT(Integer, [Int 10])) false;;
@@ -379,21 +296,192 @@ assertEquals (SetMin(
             SingletonSet(Integer, IntImm 10), NoExpression))))))
     (SetT(Integer, [Int 10]))
     false;;
-(*assertDynamicTypeException (SetMin(
+assertDynamicTypeException (SetMin(
     SingletonSet(Closure(NoType, Integer), Func(NoIdentifier, NoType, Integer, IntImm 10))))
-    true;;*)
-(*TODO: rewrite to reflect closure comparison*)
+    false;;
+assertDynamicTypeException (SetMin(
+    SetOf(Closure(NoType, Integer), ExpressionList(Func(NoIdentifier, NoType, Integer, IntImm 10), ExpressionList(Func(NoIdentifier, NoType, Integer, IntImm 10), NoExpression)))))
+    false;;
 assertEmptySetException (SetMin(EmptySet(Integer))) false;;
-(*TODO: write SetMax*)
+
+(*SetMax*)
+assertEquals (SetMax(
+    SetOf(Integer,
+        ExpressionList(IntImm 42, ExpressionList(IntImm 23, ExpressionList(IntImm 10, NoExpression))))))
+    (Int 42)
+    false;;
+assertEquals (SetMax(
+    SetOf(Boolean,
+        ExpressionList(BoolImm true, ExpressionList(BoolImm false, NoExpression)))))
+    (Bool true)
+    false;;
+assertEquals (SetMax(
+    SetOf(String,
+        ExpressionList(StringImm "c", ExpressionList(StringImm "a", ExpressionList(StringImm "b", NoExpression))))))
+    (Str "c")
+    false;;
+assertEquals (SetMax(
+    SetOf(Set(Integer),
+        ExpressionList(
+            SetOf(Integer, ExpressionList(IntImm 42, ExpressionList(IntImm 23, NoExpression))), ExpressionList(
+            SetOf(Integer, ExpressionList(IntImm 42, ExpressionList(IntImm 23, ExpressionList(IntImm 13, NoExpression)))), ExpressionList(
+            SingletonSet(Integer, IntImm 10), NoExpression))))))
+    (SetT(Integer, [Int 13; Int 23; Int 42]))
+    false;;
+assertDynamicTypeException (SetMax(
+    SingletonSet(Closure(NoType, Integer), Func(NoIdentifier, NoType, Integer, IntImm 10))))
+    false;;
+assertDynamicTypeException (SetMax(
+    SetOf(Closure(NoType, Integer), ExpressionList(Func(NoIdentifier, NoType, Integer, IntImm 10), ExpressionList(Func(NoIdentifier, NoType, Integer, IntImm 10), NoExpression)))))
+    false;;
+assertEmptySetException (SetMax(EmptySet(Integer))) false;;
 
 (*GreaterThan*)
-(*TODO: write GreaterThan and LessThan*)
+assertEquals (GreaterThan(IntImm 10, IntImm 9)) (Bool true) false;;
+assertEquals (GreaterThan(BoolImm false, BoolImm true)) (Bool false) false;;
+assertEquals (GreaterThan(StringImm "test", StringImm "a")) (Bool true) false;;
+assertEquals (GreaterThan(
+    SingletonSet(Integer, IntImm 10),
+    SetOf(Integer, ExpressionList(IntImm 10, ExpressionList(IntImm 20, NoExpression)))))
+    (Bool false)
+    false;;
+assertEquals (GreaterThan(
+    SingletonSet(Integer, IntImm 10),
+    SingletonSet(Set(Integer), SingletonSet(Integer, IntImm 10))))
+    (Bool false)
+    false;;
+assertDynamicTypeException (GreaterThan(
+    Func(NoIdentifier, NoType, Integer, IntImm 10),
+    Func(NoIdentifier, NoType, Integer, IntImm 10)))
+    false;;
+assertDynamicTypeException (GreaterThan(IntImm 10, BoolImm false)) false;;
+
+(*LessThan*)
+assertEquals (LessThan(IntImm 10, IntImm 9)) (Bool false) false;;
+assertEquals (LessThan(BoolImm false, BoolImm true)) (Bool true) false;;
+assertEquals (LessThan(StringImm "test", StringImm "a")) (Bool false) false;;
+assertEquals (LessThan(
+    SingletonSet(Integer, IntImm 10),
+    SetOf(Integer, ExpressionList(IntImm 10, ExpressionList(IntImm 20, NoExpression)))))
+    (Bool true)
+    false;;
+assertEquals (LessThan(
+    SingletonSet(Integer, IntImm 10),
+    SingletonSet(Set(Integer), SingletonSet(Integer, IntImm 10))))
+    (Bool true)
+    false;;
+assertDynamicTypeException (LessThan(
+    Func(NoIdentifier, NoType, Integer, IntImm 10),
+    Func(NoIdentifier, NoType, Integer, IntImm 10)))
+    false;;
+assertDynamicTypeException (LessThan(IntImm 10, BoolImm false)) false;;
 
 (*ForAll*)
-assertEquals (ForAll(
+assertEquals (Forall(
     SetOf(Integer,
-        ExpressionList(IntImm 42),
-        ExpressionList(IntImm 22),
-        ExpressionList(IntImm 10, NoExpression))
+        ExpressionList(IntImm 42,
+        ExpressionList(IntImm 22,
+        ExpressionList(IntImm 10, NoExpression)))),
+    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Boolean,   (*IsEven function*)
+        Eq(Times(Divide(Den "n", IntImm 2), IntImm 2), Den "n"))
     ))
-(*TODO: Check if even with ((x/2)*2)=x *)
+    (Bool true)
+    false;;
+assertEquals (Forall(
+    SingletonSet(Boolean, BoolImm true),
+    Func(IdentifierList("b", NoIdentifier), TypeDescriptorList(Boolean, NoType), Boolean, Den "b")))
+    (Bool true)
+    false;;
+assertDynamicTypeException (Forall(
+    SingletonSet(Boolean, BoolImm true),
+    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Boolean,   (*IsEven function*)
+            Eq(Times(Divide(Den "n", IntImm 2), IntImm 2), Den "n"))
+        ))
+    false;;
+assertWrongReturnTypeException (Forall(
+    SingletonSet(Boolean, BoolImm true),
+    Func(IdentifierList("b", NoIdentifier), TypeDescriptorList(Boolean, NoType), Integer, IntImm 10)))
+    false;;
+
+(*Exists*)
+assertEquals (Exists(
+    SetOf(Integer,
+        ExpressionList(IntImm 42,
+        ExpressionList(IntImm 23,
+        ExpressionList(IntImm 10, NoExpression)))),
+    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Boolean,   (*IsOdd function*)
+        Not(Eq(Times(Divide(Den "n", IntImm 2), IntImm 2), Den "n")))
+    ))
+    (Bool true)
+    false;;
+assertEquals (Exists(
+    SingletonSet(Boolean, BoolImm false),
+    Func(IdentifierList("b", NoIdentifier), TypeDescriptorList(Boolean, NoType), Boolean, Den "b")))
+    (Bool false)
+    false;;
+assertDynamicTypeException (Exists(
+    SingletonSet(Boolean, BoolImm true),
+    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Boolean,   (*IsEven function*)
+            Eq(Times(Divide(Den "n", IntImm 2), IntImm 2), Den "n"))
+        ))
+    false;;
+assertWrongReturnTypeException (Exists(
+    SingletonSet(Boolean, BoolImm true),
+    Func(IdentifierList("b", NoIdentifier), TypeDescriptorList(Boolean, NoType), Integer, IntImm 10)))
+    false;;
+
+(*Filter*)
+assertEquals (Filter(
+    SetOf(Integer,
+        ExpressionList(IntImm 10,
+        ExpressionList(IntImm 23,
+        ExpressionList(IntImm 42, NoExpression)))),
+    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Boolean,   (*IsOdd function*)
+        Not(Eq(Times(Divide(Den "n", IntImm 2), IntImm 2), Den "n")))
+    ))
+    (SetT(Integer, [Int 23]))
+    false;;
+assertEquals (Filter(
+    SetOf(Boolean, ExpressionList(BoolImm false, ExpressionList(BoolImm true, NoExpression))),
+    Func(IdentifierList("b", NoIdentifier), TypeDescriptorList(Boolean, NoType), Boolean, Den "b")))
+    (SetT(Boolean, [Bool true]))
+    false;;
+assertDynamicTypeException (Filter(
+    SetOf(Boolean, ExpressionList(BoolImm false, ExpressionList(BoolImm true, NoExpression))),
+    Func(IdentifierList("b", NoIdentifier), TypeDescriptorList(Integer, NoType), Boolean, BoolImm true)))
+    true;;
+assertWrongReturnTypeException (Filter(
+    SetOf(Boolean, ExpressionList(BoolImm false, ExpressionList(BoolImm true, NoExpression))),
+    Func(IdentifierList("b", NoIdentifier), TypeDescriptorList(Boolean, NoType), Integer, IntImm 10)))
+    false;;
+
+(*Map*)
+assertEquals (Map(
+    SetOf(Integer,
+        ExpressionList(IntImm 10,
+        ExpressionList(IntImm 23,
+        ExpressionList(IntImm 42, NoExpression)))),
+    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Boolean,   (*IsEven function*)
+            Eq(Times(Divide(Den "n", IntImm 2), IntImm 2), Den "n"))
+        ))
+    (SetT(Boolean, [Bool true; Bool false]))
+    false;;
+assertEquals (Map(
+    SetOf(Integer,
+        ExpressionList(IntImm 10,
+        ExpressionList(IntImm 23,
+        ExpressionList(IntImm 42, NoExpression)))),
+    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer,   (*IsEven function*)
+            Times(Den "n", IntImm 6))
+        ))
+    (SetT(Integer, [Int 60; Int 252; Int 138]))
+    false;;
+assertEquals (Map(
+    SetOf(Boolean, ExpressionList(BoolImm true, ExpressionList(BoolImm false, NoExpression))),
+    Func(IdentifierList("b", NoIdentifier), TypeDescriptorList(Boolean, NoType), Integer, IntImm 10)))
+    (SetT(Integer, [Int 10]))
+    false;;
+assertDynamicTypeException (Map(
+    SetOf(Boolean, ExpressionList(BoolImm true, ExpressionList(BoolImm false, NoExpression))),
+    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den "n")))
+    true;;
