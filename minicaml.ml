@@ -62,6 +62,10 @@ type expression =
     | Exists of expression * expression
     | Filter of expression * expression
     | Map of expression * expression
+    | SetUnion of expression * expression
+    | SetIntersection of expression * expression
+    | SetSubtraction of expression * expression
+    (*TODO: Add union, intersection, subtraction*)
 
 and expressionList =
     | NoExpression
@@ -283,6 +287,24 @@ let setRemove set element = match set with
             raise DynamicTypeException)
     | _ -> raise DynamicTypeException
 
+let rec setUnion ls vs = match vs with       (*Adds all elements without duplicates*)
+    | [] -> ls
+    | x::xs -> if contains ls x then setUnion ls xs else setUnion (x::ls) xs
+
+let rec setIntersection ls1 ls2 = match (ls1, ls2) with
+    | [], _ -> []
+    | _, [] -> []
+    | x::xs, ys -> if (contains ys x)
+        then x::(setIntersection xs ys)
+        else (setIntersection xs ys)
+
+let rec setSubtraction ls1 ls2 = match (ls1, ls2) with
+    | [], _ -> []
+    | _, [] -> ls1
+    | x::xs, ys -> if (contains ys x)
+        then (setSubtraction xs ys)
+        else x::(setSubtraction xs ys)
+
 (*Evaluation*)
 let rec eval (e: expression) (env: evaluationType environment) = match e with
     | IntImm(n) -> Int(n)
@@ -325,10 +347,7 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
             raise DynamicTypeException)
     | SetOf(typeDesc, exprs) -> (let vals = evalList exprs env in
         if (checkTypeMultiple vals typeDesc) then
-            (let rec addAll ls vs = match vs with       (*Adds all elements without duplicates*)
-                | [] -> ls
-                | x::xs -> if contains ls x then addAll ls xs else addAll (x::ls) xs
-            in SetT(typeDesc, addAll [] vals))
+            SetT(typeDesc, setUnion [] vals)
         else
             raise DynamicTypeException)
     | SetPut(exp1, exp2) -> setPut (eval exp1 env) (eval exp2 env)
@@ -375,7 +394,15 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
     | Map(exp1, exp2) -> (let f = (eval exp2 env) in match (eval exp1 env, f) with
         | SetT(td, elements), ClosureT(_, _, retTD, _, _) -> SetT(retTD, map elements f)
         | _ -> raise DynamicTypeException)
-    (*TODO: remove | _ -> failwith ("not implemented yet")*)
+    | SetUnion(setExpr1, setExpr2) -> (match (eval setExpr1 env, eval setExpr2 env) with
+        | SetT(td1, els1), SetT(td2, els2) when td1 = td2 -> SetT(td1, setUnion els1 els2)
+        | _ -> raise DynamicTypeException)
+    | SetIntersection(setExpr1, setExpr2) -> (match (eval setExpr1 env, eval setExpr2 env) with
+        | SetT(td1, els1), SetT(td2, els2) when td1 = td2 -> SetT(td1, setIntersection els1 els2)
+        | _ -> raise DynamicTypeException)
+    | SetSubtraction(setExpr1, setExpr2) -> (match (eval setExpr1 env, eval setExpr2 env) with
+        | SetT(td1, els1), SetT(td2, els2) when td1 = td2 -> SetT(td1, setSubtraction els1 els2)
+        | _ -> raise DynamicTypeException)
 
 and evalList (expressions: expressionList) (env: evaluationType environment) =
     match expressions with
@@ -559,3 +586,12 @@ let rec staticTypeCheck (expression: expression) (env: typeDescriptor environmen
                 | TypeDescriptorList(td, NoType) when (td = typeDesc) -> Set(retTD)
                 | _ -> raise StaticTypeException)
             | _, _ -> raise StaticTypeException)
+        | SetUnion(setExpr1, setExpr2) -> (match (staticTypeCheck setExpr1 env, staticTypeCheck setExpr2 env) with
+            | Set(td1), Set(td2) when td1 = td2 -> Set(td1)
+            | _ -> raise StaticTypeException)
+        | SetIntersection(setExpr1, setExpr2) -> (match (staticTypeCheck setExpr1 env, staticTypeCheck setExpr2 env) with
+            | Set(td1), Set(td2) when td1 = td2 -> Set(td1)
+            | _ -> raise StaticTypeException)
+        | SetSubtraction(setExpr1, setExpr2) -> (match (staticTypeCheck setExpr1 env, staticTypeCheck setExpr2 env) with
+            | Set(td1), Set(td2) when td1 = td2 -> Set(td1)
+            | _ -> raise StaticTypeException)

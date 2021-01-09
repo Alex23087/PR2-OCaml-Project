@@ -485,3 +485,66 @@ assertDynamicTypeException (Map(
     SetOf(Boolean, ExpressionList(BoolImm true, ExpressionList(BoolImm false, NoExpression))),
     Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer, Den "n")))
     true;;
+
+(*SetUnion*)
+assertEquals (SetUnion(
+    SingletonSet(Boolean, BoolImm true),
+    SingletonSet(Boolean, BoolImm false)))
+    (SetT(Boolean, [Bool true; Bool false]))
+    false;
+assertEquals (SetUnion(
+    SingletonSet(Boolean, BoolImm true),
+    EmptySet(Boolean)))
+    (SetT(Boolean, [Bool true]))
+    false;
+assertEquals (SetUnion(
+    SingletonSet(Boolean, BoolImm true),
+    SingletonSet(Boolean, BoolImm true)))
+    (SetT(Boolean, [Bool true]))
+    false;
+assertDynamicTypeException (SetUnion(
+    SingletonSet(Boolean, BoolImm true),
+    SingletonSet(Integer, IntImm 10)))
+    false;;
+
+(*SetIntersection*)
+assertEquals (SetIntersection(
+    SingletonSet(Boolean, BoolImm true),
+    SingletonSet(Boolean, BoolImm false)))
+    (SetT(Boolean, []))
+    false;
+assertEquals (SetIntersection(
+    SingletonSet(Boolean, BoolImm true),
+    EmptySet(Boolean)))
+    (SetT(Boolean, []))
+    false;
+assertEquals (SetIntersection(
+    SingletonSet(Boolean, BoolImm true),
+    SingletonSet(Boolean, BoolImm true)))
+    (SetT(Boolean, [Bool true]))
+    false;
+assertDynamicTypeException (SetIntersection(
+    SingletonSet(Boolean, BoolImm true),
+    SingletonSet(Integer, IntImm 10)))
+    false;;
+
+(*SetSubtraction*)
+assertEquals (SetSubtraction(
+    SingletonSet(Boolean, BoolImm true),
+    SingletonSet(Boolean, BoolImm false)))
+    (SetT(Boolean, [Bool true]))
+    false;
+assertEquals (SetSubtraction(
+    SingletonSet(Boolean, BoolImm true),
+    EmptySet(Boolean)))
+    (SetT(Boolean, [Bool true]))
+    false;
+assertEquals (SetSubtraction(
+    SingletonSet(Boolean, BoolImm true),
+    SingletonSet(Boolean, BoolImm true)))
+    (SetT(Boolean, []))
+    false;
+assertDynamicTypeException (SetSubtraction(
+    SingletonSet(Boolean, BoolImm true),
+    SingletonSet(Integer, IntImm 10)))
+    false;;
