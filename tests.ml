@@ -52,70 +52,6 @@ let assertWrongReturnTypeException (expr: expression) (debugPrint: bool) =
     with WrongReturnTypeException -> print_string "Passed\n"
 ;;
 
-(*Fibonacci
-let sum = Plus(IntImm 10, IntImm 20);;
-assertEqualsDebug sum (Int 30)
-
-let fibonacci =
-    Let("fibonacci",
-        Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer,
-            If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
-                IntImm(1),
-                Plus(
-                    Apply(
-                        Den("rec"),
-                        ExpressionList(Plus(Den("n"), IntImm(-1)), NoExpression)
-                    ),
-                    Apply(
-                        Den("rec"),
-                        ExpressionList(Plus(Den("n"), IntImm(-2)), NoExpression)
-                    )
-                )
-            )
-        ),
-        Apply(Den("fibonacci"), ExpressionList(IntImm 10, NoExpression))
-    );;
-
-assertEqualsDebug fibonacci (Int 89)
-
-let fibF =
-    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer,
-        If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
-            IntImm(1),
-            Plus(
-                Apply(
-                    Den("rec"),
-                    ExpressionList(Plus(Den("n"), IntImm(-1)), NoExpression)
-                ),
-                Apply(
-                    Den("rec"),
-                    ExpressionList(Plus(Den("n"), IntImm(-2)), NoExpression)
-                )
-            )
-        )
-    )
-
-let fibSet =
-    Let("fibonacci", fibF,
-        SetOf(Integer,
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 0, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 1, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 2, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 3, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 4, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 5, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 6, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 7, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 8, NoExpression)),
-            ExpressionList(Apply(Den("fibonacci"), ExpressionList(IntImm 9, NoExpression)),
-            NoExpression))))))))))
-        )
-    )
-;;
-
-(*print_debug (eval fibSet emptyEvaluationEnvironment)*)
-EndFibonacci*)
-
 
 (*Expressions Tests*)
 
@@ -548,3 +484,68 @@ assertDynamicTypeException (SetSubtraction(
     SingletonSet(Boolean, BoolImm true),
     SingletonSet(Integer, IntImm 10)))
     false;;
+
+
+
+(*Fibonacci*)
+let sum = Plus(IntImm 10, IntImm 20);;
+assertEquals sum (Int 30) false;;
+
+let fibonacci =
+    Let("fibonacci",
+        Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer,
+            If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
+                IntImm(1),
+                Plus(
+                    Apply(
+                        Den("rec"),
+                        ExpressionList(Plus(Den("n"), IntImm(-1)), NoExpression)
+                    ),
+                    Apply(
+                        Den("rec"),
+                        ExpressionList(Plus(Den("n"), IntImm(-2)), NoExpression)
+                    )
+                )
+            )
+        ),
+        Apply(Den("fibonacci"), ExpressionList(IntImm 10, NoExpression))
+    );;
+
+assertEquals fibonacci (Int 89) false;;
+
+let fibF =
+    Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Integer,
+        If(Or(Eq(Den("n"), IntImm(1)), LessThan(Den("n"), IntImm(1))),
+            IntImm(1),
+            Plus(
+                Apply(
+                    Den("rec"),
+                    ExpressionList(Plus(Den("n"), IntImm(-1)), NoExpression)
+                ),
+                Apply(
+                    Den("rec"),
+                    ExpressionList(Plus(Den("n"), IntImm(-2)), NoExpression)
+                )
+            )
+        )
+    )
+
+let fibSet (x: int) =
+    Let("fbs",
+        Func(IdentifierList("n", NoIdentifier), TypeDescriptorList(Integer, NoType), Set(Integer),
+            Let("fibonacci", fibF,
+                If(Eq(Den "n", IntImm 0),
+                    SingletonSet(Integer, Apply(Den "fibonacci", ExpressionList(Den "n", NoExpression))),
+                    SetPut(
+                        Apply(Den "rec", ExpressionList(Plus(Den "n", IntImm (-1)), NoExpression)),
+                        Apply(Den "fibonacci", ExpressionList(Den "n", NoExpression))
+                    )
+                )
+            )
+        ),
+        Print(Apply(Den "fbs", ExpressionList(IntImm x, NoExpression)))
+    );;
+
+eval (Print(fibF)) emptyEvaluationEnvironment;;
+eval (Print(StringImm "Fibonacci set from f(0) until f(10):")) emptyEvaluationEnvironment;;
+eval (fibSet 10) emptyEvaluationEnvironment;;

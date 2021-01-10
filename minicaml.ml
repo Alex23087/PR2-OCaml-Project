@@ -65,7 +65,6 @@ type expression =
     | SetUnion of expression * expression
     | SetIntersection of expression * expression
     | SetSubtraction of expression * expression
-    (*TODO: Add union, intersection, subtraction*)
 
 and expressionList =
     | NoExpression
@@ -162,16 +161,12 @@ let rec printEvaluationType (evType: evaluationType) = match evType with
             in p x
         ) ; print_string ")"
     | ClosureT(id, idTD, retTD, _, _) -> print_string "ClosureT(" ;
-        (let rec pID l = match l with
-            | NoIdentifier -> print_string ""
-            | IdentifierList(x, NoIdentifier) -> print_string x
-            | IdentifierList(x, xs) -> print_string x ; print_string ", " ; pID xs
-        in pID id);
-        (let rec pID l = match l with
-            | NoType -> print_string ""
-            | TypeDescriptorList(x, NoType) -> printTypeDescriptor x
-            | TypeDescriptorList(x, xs) -> printTypeDescriptor x ; print_string ", " ; pID xs
-        in pID idTD);   (*TODO:Check this function*)
+        (let rec pFunc (lID: identifierList) (lTD: typeDescriptorList) = match (lID, lTD) with
+            | NoIdentifier, NoType -> print_string ""
+            | IdentifierList(x, NoIdentifier), TypeDescriptorList(y, NoType) -> (print_string (x^": ") ; printTypeDescriptor y)
+            | IdentifierList(x, xs), TypeDescriptorList(y, ys) -> (print_string (x^": ") ; printTypeDescriptor y ; print_string ", " ; pFunc xs ys ; print_string "")
+            | _ -> raise DynamicTypeException
+        in pFunc id idTD);
         print_string ") <";
         print_string "expr";
         print_string ">"
@@ -350,21 +345,21 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
             SetT(typeDesc, setUnion [] vals)
         else
             raise DynamicTypeException)
-    | SetPut(exp1, exp2) -> setPut (eval exp1 env) (eval exp2 env)
+    | SetPut(setExpr, valExpr) -> setPut (eval setExpr env) (eval valExpr env)
     | Print(exp) -> (let value = (eval exp env) in printEvaluationType value ; print_string "\n" ; value)
-    | SetRemove(exp1, exp2) -> setRemove (eval exp1 env) (eval exp2 env)
+    | SetRemove(setExpr, valExpr) -> setRemove (eval setExpr env) (eval valExpr env)
     | SetIsEmpty(exp) -> (match (eval exp env) with
         | SetT(_, []) -> Bool(true)
         | SetT(_,_) -> Bool(false)
         | _ -> raise DynamicTypeException)
-    | SetContains(exp1, exp2) -> (match (eval exp1 env) with
-        | SetT(tDesc, elems) -> (let value = (eval exp2 env) in
+    | SetContains(setExpr, valExpr) -> (match (eval setExpr env) with
+        | SetT(tDesc, elems) -> (let value = (eval valExpr env) in
             if (checkType value tDesc)
                 then Bool(contains elems value)
                 else raise DynamicTypeException)
         | _ -> raise DynamicTypeException)
     | SetIsSubset(exp1, exp2) -> (match (eval exp1 env, eval exp2 env) with
-        | (SetT(td1, els1), SetT(td2, els2)) -> (
+        | SetT(td1, els1), SetT(td2, els2) -> (
             if (td1 = td2)
                 then Bool(setIsSubset els1 els2)
                 else raise DynamicTypeException
@@ -382,16 +377,16 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
         | _ -> raise DynamicTypeException)
     | GreaterThan(exp1, exp2) -> Bool(evtGreaterThan (eval exp1 env) (eval exp2 env))
     | LessThan(exp1, exp2) -> Bool(evtGreaterThan (eval exp2 env) (eval exp1 env))
-    | Forall(exp1, exp2) -> (match (eval exp1 env) with
-        | SetT(td, elements)-> Bool(forall elements (eval exp2 env))
+    | Forall(setExpr, funcExpr) -> (match (eval setExpr env) with
+        | SetT(td, elements)-> Bool(forall elements (eval funcExpr env))
         | _ -> raise DynamicTypeException)
-    | Exists(exp1, exp2) -> (match (eval exp1 env) with
-        | SetT(td, elements) -> Bool(exists elements (eval exp2 env))
+    | Exists(setExpr, funcExpr) -> (match (eval setExpr env) with
+        | SetT(td, elements) -> Bool(exists elements (eval funcExpr env))
         | _ -> raise DynamicTypeException)
-    | Filter(exp1, exp2) -> (match (eval exp1 env) with
-        | SetT(td, elements) -> SetT(td, filter elements (eval exp2 env))
+    | Filter(setExpr, funcExpr) -> (match (eval setExpr env) with
+        | SetT(td, elements) -> SetT(td, filter elements (eval funcExpr env))
         | _ -> raise DynamicTypeException)
-    | Map(exp1, exp2) -> (let f = (eval exp2 env) in match (eval exp1 env, f) with
+    | Map(setExpr, funcExpr) -> (let f = (eval funcExpr env) in match (eval setExpr env, f) with
         | SetT(td, elements), ClosureT(_, _, retTD, _, _) -> SetT(retTD, map elements f)
         | _ -> raise DynamicTypeException)
     | SetUnion(setExpr1, setExpr2) -> (match (eval setExpr1 env, eval setExpr2 env) with

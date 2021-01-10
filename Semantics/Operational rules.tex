@@ -1,0 +1,77 @@
+\documentclass{article}
+\title{Operational Semantics}
+\usepackage{mathtools}
+\usepackage{amssymb}
+\usepackage{empheq}
+\usepackage{proof}
+
+\begin{document}
+\pagenumbering{gobble}
+\section{EmptySet}
+\begin{equation*}
+	\infer{EmptySet(T) \Rightarrow SetT(T, \varnothing)}{-}
+\end{equation*}
+\section{SingletonSet}
+\begin{equation*}
+	\infer{SingletonSet(T, e) \Rightarrow SetT(T, \{v\})}{e \Rightarrow v:T}
+\end{equation*}
+\section{SetOf}
+\begin{equation*}
+	\infer{SetOf(T, \{e_1...e_n\} \Rightarrow SetT(T, \{v_1...v_n\}}{e_1 \Rightarrow v_1:T & ... & e_n \Rightarrow v_n:T}
+\end{equation*}
+\section{SetPut}
+\begin{equation*}
+	\infer{SetPut(e_1, e_2) \Rightarrow SetT(T, s \cap \{v\}}{e_1 \Rightarrow SetT(T, s) & e_2 \Rightarrow v:T}
+\end{equation*}
+\section{SetRemove}
+\begin{equation*}
+	\infer{SetPut(e_1, e_2) \Rightarrow SetT(T, s \setminus \{v\}}{e_1 \Rightarrow SetT(T, s) & e_2 \Rightarrow v:T}
+\end{equation*}
+\section{SetIsEmpty}
+\begin{equation*}
+	\infer{SetIsEmpty(e) \Rightarrow Bool(s = \varnothing)}{e \Rightarrow SetT(T, s)}
+\end{equation*}
+\section{SetContains}
+\begin{equation*}
+	\infer{SetContains(e_1, e_2) \Rightarrow Bool(v \in s)}{e_1 \Rightarrow SetT(T, s) & e_2 \Rightarrow v:T}
+\end{equation*}
+\section{SetIsSubset}
+\begin{equation*}
+	\infer{SetIsSubset(e_1, e_2) \Rightarrow Bool(s_1 \subset s_2)}{e_1 \Rightarrow SetT(T, s_1) & e_2 \Rightarrow SetT(T, s_2)}
+\end{equation*}
+\section{SetMin}
+\begin{equation*}
+	\infer{SetMin(e) \Rightarrow min(s):T}{e \Rightarrow SetT(T, s) & T \neq Closure(t)}
+\end{equation*}
+\section{SetMax}
+\begin{equation*}
+	\infer{SetMin(e) \Rightarrow max(s):T}{e \Rightarrow SetT(T, s) & T \neq Closure(t)}
+\end{equation*}
+\section{ForAll}
+\begin{equation*}
+	\infer{Forall(e_1, e_2) \Rightarrow Bool(\forall x \in s.\; Apply(f, x) \Rightarrow Bool(true))}{e_1 \Rightarrow SetT(T, s) & e_2 \Rightarrow f:T \rightarrow Bool}
+\end{equation*}
+\section{Exists}
+\begin{equation*}
+	\infer{Forall(e_1, e_2) \Rightarrow Bool(\exists x \in s.\; Apply(f, x) \Rightarrow Bool(true))}{e_1 \Rightarrow SetT(T, s) & e_2 \Rightarrow f:T \rightarrow Bool}
+\end{equation*}
+\section{Filter}
+\begin{equation*}
+	\infer{Filter(e_1, e_2) \Rightarrow SetT(T, \{x \in s : Apply(f, x) \Rightarrow Bool(true)\})}{e_1 \Rightarrow SetT(T, s) & e_2 \Rightarrow f:T \rightarrow Bool}
+\end{equation*}
+\section{Map}
+\begin{equation*}	\infer{Filter(e_1, e_2) \Rightarrow SetT(T_2, \{Apply(f,x \in s)\})}{e_1 \Rightarrow SetT(T_1, s) & e_2 \Rightarrow f:T_1 \rightarrow T_2}
+\end{equation*}
+\section{SetUnion}
+\begin{equation*}
+	\infer{SetUnion(e_1, e_2) \Rightarrow SetT(T, s_1 \cap s_2)}{e_1 \Rightarrow SetT(T, s_1) & e_2 \Rightarrow SetT(T, s_2)}
+\end{equation*}
+\section{SetIntersection}
+\begin{equation*}
+	\infer{SetUnion(e_1, e_2) \Rightarrow SetT(T, s_1 \cup s_2)}{e_1 \Rightarrow SetT(T, s_1) & e_2 \Rightarrow SetT(T, s_2)}
+\end{equation*}
+\section{SetSubtraction}
+\begin{equation*}
+	\infer{SetUnion(e_1, e_2) \Rightarrow SetT(T, s_1 \setminus s_2)}{e_1 \Rightarrow SetT(T, s_1) & e_2 \Rightarrow SetT(T, s_2)}
+\end{equation*}
+\end{document}
