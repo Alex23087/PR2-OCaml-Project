@@ -1,6 +1,6 @@
 #use "minicaml.ml";;
 
-(*Fibonacci*)
+(*Test Utility Functions*)
 exception AssertException
 
 let print_debug (evt: evaluationType) =
@@ -21,8 +21,6 @@ let assertEquals (expr: expression) (evt: evaluationType) (debugPrint: bool) = l
         raise AssertException
 ;;
 
-let assertEqualsDebug a b = assertEquals a b true;;
-
 let assertDynamicTypeException (expr: expression) (debugPrint: bool) =
     try let res = eval expr emptyEvaluationEnvironment in
         (if debugPrint then
@@ -31,8 +29,6 @@ let assertDynamicTypeException (expr: expression) (debugPrint: bool) =
             print_string ""); raise AssertException
     with DynamicTypeException -> print_string "Passed\n"
 ;;
-
-let assertDynamicTypeExceptionDebug a = assertDynamicTypeException a true;;
 
 let assertEmptySetException (expr: expression) (debugPrint: bool) =
     try let res = eval expr emptyEvaluationEnvironment in

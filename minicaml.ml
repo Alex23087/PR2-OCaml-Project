@@ -1,7 +1,7 @@
 (*Exceptions*)
-exception IdentifierNotFound
-exception ApplyingNonFunctional
-exception IncorrectParameterListLength
+exception IdentifierNotFoundException
+exception ApplyingNonFunctionalException
+exception IncorrectParameterListLengthException
 exception StaticTypeException
 exception DynamicTypeException
 exception EmptySetException
@@ -76,16 +76,12 @@ type evaluationType =
     | Str of string
     | SetT of typeDescriptor * evaluationType list
     | ClosureT of identifierList * typeDescriptorList * typeDescriptor * expression * evaluationType environment
-    (*| Unbound*)
-
-
 
 
 (*Environment*)
+let emptyEvaluationEnvironment = fun (x: identifier) -> raise IdentifierNotFoundException
 
-let emptyEvaluationEnvironment = fun (x: identifier) -> raise IdentifierNotFound
-
-let emptyTypeEnvironment = fun (x: identifier) -> raise IdentifierNotFound
+let emptyTypeEnvironment = fun (x: identifier) -> raise IdentifierNotFoundException
 
 let bind (id: identifier) (v: 'a) (env: 'a environment) =
     fun (x: identifier) -> if x = id
@@ -96,8 +92,10 @@ let rec bindList (ids: identifierList) (vs: 'a list) (env: 'a environment) =
     match (ids, vs) with
         | (NoIdentifier, []) -> env
         | (IdentifierList(i, il), v::vl) -> bindList il vl (bind i v env)
-        | _ -> raise IncorrectParameterListLength
+        | _ -> raise IncorrectParameterListLengthException
 
+
+(*Dynamic Type Checking*)
 let rec checkType (evType: evaluationType) (typeDesc: typeDescriptor) = match typeDesc with
     | Integer -> (match evType with
         | Int(_) -> true
@@ -170,11 +168,11 @@ let rec printEvaluationType (evType: evaluationType) = match evType with
         print_string ") <";
         print_string "expr";
         print_string ">"
-    (*TODO: remove | Unbound -> print_string "Unbound"*)
 
 let rec printEVTlist (l: evaluationType list) = match l with
     | [] -> print_string ""
     | x::xs -> printEvaluationType x ; printEVTlist xs
+
 
 (*Utility functions*)
 let rec evtEquals (elem1: evaluationType) (elem2: evaluationType) = match (elem1, elem2) with
@@ -183,7 +181,6 @@ let rec evtEquals (elem1: evaluationType) (elem2: evaluationType) = match (elem1
     | Str(a), Str(b) -> a=b
     | SetT(td1, els1), SetT(td2, els2) -> (td1 = td2) && (evtEqualsSet els1 els2)
     | _ -> raise DynamicTypeException
-    (*TODO: add closure equality maybe?*)
 
 and contains (lst: evaluationType list) (elem: evaluationType) = match lst with
     | [] -> false
@@ -220,7 +217,6 @@ let rec evtGreaterThan (elem1: evaluationType) (elem2: evaluationType) = match (
                 then false
                 else (listCount els1) > (listCount els2))
     | _ -> raise DynamicTypeException
-    (*TODO: add closure comparison*)
 
 let rec setIsSubset (lls: evaluationType list) (rls: evaluationType list) = match lls with
     | [] -> true
@@ -332,7 +328,7 @@ let rec eval (e: expression) (env: evaluationType environment) = match e with
                                 then returnValue
                                 else raise DynamicTypeException
                         else raise DynamicTypeException)
-            | _ -> raise ApplyingNonFunctional
+            | _ -> raise ApplyingNonFunctionalException
         )
     | EmptySet(typeDesc) -> SetT(typeDesc, [])
     | SingletonSet(typeDesc, expr) -> (let value = eval expr env in
@@ -471,13 +467,7 @@ and map (elements: evaluationType list) (func: evaluationType) = match elements 
         | _ -> raise DynamicTypeException)
 
 
-
-
-
-
-
-
-
+(*Static Type Checking*)
 let rec staticTypeCheck (expression: expression) (env: typeDescriptor environment) =
     match expression with
         | IntImm(_) -> Integer
